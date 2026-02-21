@@ -15,8 +15,8 @@ export default function App() {
   const [results,    setResults]    = useState(null)
   const [selectedWp, setSelectedWp] = useState(null)
 
-  const handleUploadComplete = () => {
-    setResults(MOCK_RESULTS)
+  const handleUploadComplete = (results, opts) => {
+    setResults(opts?.useDemo ? MOCK_RESULTS : results)
     setView('dashboard')
   }
 

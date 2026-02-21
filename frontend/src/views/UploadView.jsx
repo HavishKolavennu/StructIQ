@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import Layout from '../components/Layout'
-import { MOCK_STATUS_STEPS } from '../mockData'
+import { uploadImages, getStatus, getResults } from '../api'
 
 const ZONES = [
   { id: 'floor_1', label: 'Floor 1' },
@@ -10,22 +10,37 @@ const ZONES = [
   { id: 'basement', label: 'Basement' },
 ]
 
-// ── VideoUploader ──────────────────────────────────────────────────────────────
-function VideoUploader({ file, onFile }) {
+const STEP_PROGRESS = {
+  starting: 10,
+  vlm_analysis: 50,
+  assembling_results: 90,
+  complete: 100,
+  error: 0,
+}
+
+// ── ImageUploader ──────────────────────────────────────────────────────────────
+function ImageUploader({ files, onFiles }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setDragging(false)
-    const dropped = e.dataTransfer.files[0]
-    if (dropped && dropped.type.startsWith('video/')) onFile(dropped)
-  }, [onFile])
+    const dropped = Array.from(e.dataTransfer.files).filter(f =>
+      f.type.startsWith('image/')
+    )
+    if (dropped.length) onFiles(dropped)
+  }, [onFiles])
 
   const handleDrag = useCallback((e) => {
     e.preventDefault()
     setDragging(e.type === 'dragover')
   }, [])
+
+  const handleChange = useCallback((e) => {
+    const selected = Array.from(e.target.files || [])
+    if (selected.length) onFiles(selected)
+  }, [onFiles])
 
   return (
     <div
@@ -34,14 +49,14 @@ function VideoUploader({ file, onFile }) {
       onDragOver={handleDrag}
       onDragLeave={handleDrag}
       style={{
-        border: `2px dashed ${dragging ? 'var(--accent)' : file ? 'var(--stage-complete)' : 'var(--border)'}`,
+        border: `2px dashed ${dragging ? 'var(--accent)' : files?.length ? 'var(--stage-complete)' : 'var(--border)'}`,
         borderRadius: 12,
         padding: '44px 32px',
         textAlign: 'center',
         cursor: 'pointer',
         background: dragging
           ? 'rgba(245,158,11,0.04)'
-          : file
+          : files?.length
             ? 'rgba(16,185,129,0.04)'
             : 'var(--bg-subtle)',
         transition: 'all 0.2s ease',
@@ -50,12 +65,13 @@ function VideoUploader({ file, onFile }) {
       <input
         ref={inputRef}
         type="file"
-        accept="video/*"
+        accept="image/jpeg,image/png,image/jpg"
+        multiple
         style={{ display: 'none' }}
-        onChange={e => onFile(e.target.files[0])}
+        onChange={handleChange}
       />
 
-      {file ? (
+      {files?.length ? (
         <>
           <div
             style={{
@@ -75,10 +91,14 @@ function VideoUploader({ file, onFile }) {
             </svg>
           </div>
           <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 15, letterSpacing: '-0.01em' }}>
-            {file.name}
+            {files.length} image{files.length !== 1 ? 's' : ''} selected
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-            {(file.size / 1024 / 1024).toFixed(1)} MB · Click to replace
+            {files.map(f => f.name).join(', ').slice(0, 50)}
+            {(files.reduce((a, f) => a + f.name.length, 0) > 50) ? '...' : ''}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+            Click to replace
           </div>
         </>
       ) : (
@@ -97,16 +117,17 @@ function VideoUploader({ file, onFile }) {
             }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 16v-2a4 4 0 014-4h8M4 8V6a2 2 0 012-2h2M4 8v8a2 2 0 002 2h12a2 2 0 002-2V8" />
-              <path d="M12 12h8v8" />
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="M21 15l-5-5L5 21" />
             </svg>
           </div>
           <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 16, marginBottom: 6 }}>
-            Drop site walkthrough video here
+            Drop construction site images here
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
             or <span style={{ color: 'var(--accent)', fontWeight: 600 }}>click to browse</span>
-            {' '}— MP4, MOV, AVI
+            {' '}— JPG, PNG
           </div>
         </>
       )}
@@ -163,9 +184,8 @@ function ZoneSelector({ value, onChange }) {
 }
 
 // ── ProcessingStatus ───────────────────────────────────────────────────────────
-function ProcessingStatus({ stepIndex }) {
-  const step = MOCK_STATUS_STEPS[stepIndex] ?? MOCK_STATUS_STEPS[0]
-  const isComplete = step.step === 'complete'
+function ProcessingStatus({ step, detail, isComplete, isError }) {
+  const progress = STEP_PROGRESS[step] ?? 50
 
   return (
     <div
@@ -177,7 +197,23 @@ function ProcessingStatus({ stepIndex }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-        {isComplete ? (
+        {isError ? (
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: 'rgba(239,68,68,0.12)',
+              border: '1.5px solid #EF4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ color: '#EF4444', fontSize: 14 }}>✕</span>
+          </div>
+        ) : isComplete ? (
           <div
             style={{
               width: 24,
@@ -209,7 +245,7 @@ function ProcessingStatus({ stepIndex }) {
           />
         )}
         <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 14 }}>
-          {step.label}
+          {detail || step}
         </span>
       </div>
 
@@ -217,29 +253,16 @@ function ProcessingStatus({ stepIndex }) {
         <div
           style={{
             height: '100%',
-            width: `${step.progress}%`,
+            width: `${progress}%`,
             borderRadius: 3,
-            background: isComplete
-              ? 'linear-gradient(90deg, var(--stage-complete), #34D399)'
-              : 'linear-gradient(90deg, var(--accent), var(--accent-muted))',
+            background: isError
+              ? '#EF4444'
+              : isComplete
+                ? 'linear-gradient(90deg, var(--stage-complete), #34D399)'
+                : 'linear-gradient(90deg, var(--accent), var(--accent-muted))',
             transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
           }}
         />
-      </div>
-
-      <div style={{ display: 'flex', gap: 6 }}>
-        {MOCK_STATUS_STEPS.map((s, i) => (
-          <div
-            key={s.step}
-            style={{
-              flex: 1,
-              height: 3,
-              borderRadius: 2,
-              background: i < stepIndex ? 'var(--accent)' : i === stepIndex ? 'var(--accent-muted)' : 'var(--border-subtle)',
-              transition: 'background 0.3s',
-            }}
-          />
-        ))}
       </div>
     </div>
   )
@@ -247,24 +270,57 @@ function ProcessingStatus({ stepIndex }) {
 
 // ── UploadView ─────────────────────────────────────────────────────────────────
 export default function UploadView({ onComplete }) {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [zone, setZone] = useState('floor_3')
   const [uploading, setUploading] = useState(false)
-  const [stepIndex, setStepIndex] = useState(0)
+  const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
   const handleUpload = async () => {
-    if (!file) {
-      setError('Please select a video file.')
+    if (!files?.length) {
+      setError('Please select at least one image.')
       return
     }
     setError(null)
     setUploading(true)
-    for (let i = 0; i < MOCK_STATUS_STEPS.length; i++) {
-      setStepIndex(i)
-      await new Promise(r => setTimeout(r, 900))
+    setStatus({ step: 'starting', detail: 'Uploading images...' })
+
+    try {
+      const { job_id } = await uploadImages(files, zone)
+      setStatus({ step: 'vlm_analysis', detail: 'Running AI analysis...' })
+
+      // Poll for completion
+      const pollInterval = 1500
+      while (true) {
+        const s = await getStatus(job_id)
+        setStatus({
+          step: s.current_step,
+          detail: s.progress_detail || s.current_step,
+          error: s.error_message,
+        })
+
+        if (s.status === 'complete') {
+          const results = await getResults(job_id)
+          onComplete(results)
+          return
+        }
+        if (s.status === 'error') {
+          setError(s.error_message || 'Analysis failed.')
+          setUploading(false)
+          return
+        }
+
+        await new Promise(r => setTimeout(r, pollInterval))
+      }
+    } catch (err) {
+      setError(err.message || 'Upload or analysis failed.')
+      setUploading(false)
     }
-    setTimeout(() => onComplete({ zone_id: zone }), 500)
+  }
+
+  const handleDemoResults = () => {
+    // Skip to dashboard with mock data for demo
+    onComplete(null, { useDemo: true })
   }
 
   return (
@@ -280,7 +336,6 @@ export default function UploadView({ onComplete }) {
           position: 'relative',
         }}
       >
-        {/* Subtle blueprint-style grid background */}
         <div
           style={{
             position: 'absolute',
@@ -296,7 +351,6 @@ export default function UploadView({ onComplete }) {
         />
 
         <div style={{ width: '100%', maxWidth: 540, position: 'relative', zIndex: 1 }}>
-          {/* Hero */}
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div
               style={{
@@ -332,11 +386,10 @@ export default function UploadView({ onComplete }) {
               <span style={{ color: 'var(--accent)' }}>intelligently tracked</span>
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: 15, margin: 0, lineHeight: 1.6, maxWidth: 400, marginLeft: 'auto', marginRight: 'auto' }}>
-              Upload a site walkthrough video for AI-powered analysis of beams, pipes, ducts, and walls.
+              Upload construction site images for AI-powered analysis of beams, pipes, ducts, and walls.
             </p>
           </div>
 
-          {/* Upload card */}
           <div
             style={{
               background: 'var(--bg-surface)',
@@ -351,7 +404,7 @@ export default function UploadView({ onComplete }) {
           >
             {!uploading ? (
               <>
-                <VideoUploader file={file} onFile={setFile} />
+                <ImageUploader files={files} onFiles={setFiles} />
                 <ZoneSelector value={zone} onChange={setZone} />
 
                 {error && (
@@ -371,7 +424,7 @@ export default function UploadView({ onComplete }) {
 
                 <button
                   onClick={handleUpload}
-                  disabled={!file}
+                  disabled={!files?.length}
                   className="btn-primary"
                   style={{
                     width: '100%',
@@ -379,11 +432,11 @@ export default function UploadView({ onComplete }) {
                     fontSize: 15,
                   }}
                 >
-                  {file ? 'Analyze Site Video' : 'Select a video to continue'}
+                  {files?.length ? `Analyze ${files.length} image${files.length !== 1 ? 's' : ''}` : 'Select images to continue'}
                 </button>
 
                 <button
-                  onClick={() => onComplete({ zone_id: zone })}
+                  onClick={handleDemoResults}
                   className="btn-ghost"
                   style={{ width: '100%', padding: '12px 0', textAlign: 'center' }}
                 >
@@ -391,11 +444,15 @@ export default function UploadView({ onComplete }) {
                 </button>
               </>
             ) : (
-              <ProcessingStatus stepIndex={stepIndex} />
+              <ProcessingStatus
+                step={status?.step}
+                detail={status?.detail}
+                isComplete={status?.step === 'complete'}
+                isError={!!status?.error}
+              />
             )}
           </div>
 
-          {/* Feature chips */}
           {!uploading && (
             <div
               style={{

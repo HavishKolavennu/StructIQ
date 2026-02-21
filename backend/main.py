@@ -7,18 +7,29 @@ Run with: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 from pathlib import Path
 import uuid
-from datetime import datetime, timezone
+import threading
+import shutil
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+# Load .env before other imports
+try:
+    from dotenv import load_dotenv
+    for p in [Path(__file__).parent / ".env", Path(__file__).parent.parent / ".env"]:
+        if p.exists():
+            load_dotenv(p)
+            break
+except ImportError:
+    pass
+
 # Add backend to path for imports
 import sys
 _BACKEND = Path(__file__).resolve().parent
 if str(_BACKEND) not in sys.path:
-    sys.path.insert(0, str(_BACKEND.parent))
+    sys.path.insert(0, str(_BACKEND))
 
 from models.work_packages import get_demo_work_packages
 
@@ -26,61 +37,97 @@ app = FastAPI(title="StructIQ API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory store for demo (replace with disk/DB in production)
+PROCESSING_DIR = Path(__file__).resolve().parent / "processing"
+PROCESSING_DIR.mkdir(exist_ok=True)
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
+
+# In-memory store (replace with disk/DB in production)
 JOBS: dict[str, dict] = {}
 
-# Mock results matching frontend contract
-def _mock_results(job_id: str, zone_id: str) -> dict:
-    work_packages = get_demo_work_packages(zone_id)
-    wp_list = []
-    all_elements = []
-    for wp in work_packages:
-        el_results = []
-        for el in wp.elements:
-            if "right" in el.id or "drain" in el.id:
-                stage, label, conf, evidence = "not_captured", "Not visible in uploaded footage", "none", []
-            elif "central" in el.id or "main" in el.id:
-                stage, label, conf, evidence = "connected", "Connected — bolted at both ends", "high", [
-                    {"frame_id": "frame_001", "frame_path": f"/api/frames/{job_id}/frame_001.jpg", "vlm_observation": "Element visible with connections.", "vlm_stage_assessment": "connected"}
-                ]
-            else:
-                stage, label, conf, evidence = "placed", "Placed — in position, not yet connected", "medium", [
-                    {"frame_id": "frame_002", "frame_path": f"/api/frames/{job_id}/frame_002.jpg", "vlm_observation": "Element in position.", "vlm_stage_assessment": "placed"}
-                ]
-            el_results.append({
-                "id": el.id, "name": el.name, "type": el.type,
-                "stage": stage, "stage_label": label, "confidence": conf, "frame_evidence": evidence,
-            })
-            all_elements.append(el_results[-1])
-        stages = [e["stage"] for e in el_results]
-        overall = "not_captured" if "not_captured" in stages else "in_progress" if any(s not in ("complete", "inspected") for s in stages) else "complete"
-        wp_list.append({"id": wp.id, "name": wp.name, "zone": wp.zone, "owner": wp.owner, "overall_stage": overall, "elements": el_results})
-    return {
-        "job_id": job_id,
-        "zone_id": zone_id,
-        "zone_label": zone_id.replace("_", " ").title(),
-        "processed_at": datetime.now(timezone.utc).isoformat(),
-        "summary": {
-            "total_work_packages": len(wp_list),
-            "total_elements": len(all_elements),
-            "stages_breakdown": {"complete": 2, "in_progress": 4, "not_started": 0, "not_captured": 2},
-        },
-        "work_packages": wp_list,
-        "selection_metadata": {"total_candidates": 500, "selected_count": 20},
-    }
+
+def _run_analysis_task(job_id: str, zone_id: str) -> None:
+    """Background thread: run VLM analysis and store results."""
+    frames_dir = PROCESSING_DIR / job_id
+    frames = []
+    for ext in _IMAGE_EXTS:
+        frames.extend(frames_dir.glob(f"*{ext}"))
+    frames = sorted(frames)
+
+    if not frames:
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error_message"] = "No valid image files found."
+        return
+
+    try:
+        from pipeline.analyzer import run_analysis
+
+        def on_progress(step: str, detail: str) -> None:
+            JOBS[job_id]["current_step"] = step
+            JOBS[job_id]["progress_detail"] = detail
+
+        results = run_analysis(
+            selected_frames=frames,
+            zone_id=zone_id,
+            job_id=job_id,
+            progress_callback=on_progress,
+        )
+        JOBS[job_id]["results"] = results
+        JOBS[job_id]["status"] = "complete"
+        JOBS[job_id]["current_step"] = "complete"
+        JOBS[job_id]["progress_detail"] = "Analysis complete."
+        JOBS[job_id]["selected_frame_count"] = len(frames)
+    except Exception as exc:
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error_message"] = str(exc)
+        JOBS[job_id]["current_step"] = "error"
 
 
 @app.post("/api/upload")
-async def upload(video: UploadFile = File(...), zone_id: str = Form(...)):
+async def upload(zone_id: str = Form(...), images: list[UploadFile] = File(...)):
+    """Upload construction site images for AI analysis."""
+    if not images:
+        raise HTTPException(400, "At least one image is required.")
+
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "complete", "zone_id": zone_id}
-    return {"job_id": job_id, "status": "processing", "message": "Upload received. Processing started."}
+    job_dir = PROCESSING_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_count = 0
+    for f in images:
+        if not f.filename:
+            continue
+        ext = Path(f.filename).suffix
+        if ext not in _IMAGE_EXTS:
+            continue
+        dest = job_dir / f.filename
+        content = await f.read()
+        dest.write_bytes(content)
+        saved_count += 1
+
+    if saved_count == 0:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(400, "No valid image files (JPG/PNG) received.")
+
+    JOBS[job_id] = {
+        "status": "processing",
+        "zone_id": zone_id,
+        "current_step": "starting",
+        "progress_detail": f"Saved {saved_count} image(s). Starting analysis...",
+        "selected_frame_count": saved_count,
+        "error_message": None,
+    }
+
+    thread = threading.Thread(target=_run_analysis_task, args=(job_id, zone_id))
+    thread.start()
+
+    return {"job_id": job_id, "status": "processing", "message": "Upload received. Analysis started."}
 
 
 @app.get("/api/status/{job_id}")
@@ -90,11 +137,11 @@ async def status(job_id: str):
     j = JOBS[job_id]
     return {
         "job_id": job_id,
-        "status": "complete",
-        "current_step": "assembling_results",
-        "progress_detail": "Done",
-        "selected_frame_count": 20,
-        "error_message": None,
+        "status": j["status"],
+        "current_step": j.get("current_step", "processing"),
+        "progress_detail": j.get("progress_detail", ""),
+        "selected_frame_count": j.get("selected_frame_count", 0),
+        "error_message": j.get("error_message"),
     }
 
 
@@ -102,19 +149,29 @@ async def status(job_id: str):
 async def results(job_id: str):
     if job_id not in JOBS:
         raise HTTPException(404, "Job not found")
-    zone_id = JOBS[job_id].get("zone_id", "floor_3")
-    return _mock_results(job_id, zone_id)
+    j = JOBS[job_id]
+    if j["status"] != "complete":
+        raise HTTPException(400, f"Job not complete. Status: {j['status']}")
+    if "results" not in j:
+        raise HTTPException(500, "Results not available.")
+    return j["results"]
 
 
 @app.get("/api/frames/{job_id}/{filename}")
 async def serve_frame(job_id: str, filename: str):
-    # Placeholder — return 404; frontend uses placeholder images when frames missing
-    raise HTTPException(404, "Frame not found")
+    """Serve an analyzed frame image."""
+    if job_id not in JOBS:
+        raise HTTPException(404, "Job not found")
+    frame_path = PROCESSING_DIR / job_id / filename
+    if not frame_path.is_file():
+        raise HTTPException(404, "Frame not found")
+    return FileResponse(frame_path)
 
 
 class ChatRequest(BaseModel):
     job_id: str
     question: str
+
 
 @app.post("/api/chat")
 async def chat(body: ChatRequest):
@@ -122,10 +179,6 @@ async def chat(body: ChatRequest):
         "response": "Based on the latest analysis, the Left Beam is placed but not yet connected. The Right Beam was not captured. Focus on verifying the Right Beam on-site and completing the Left Beam connections.",
         "referenced_elements": ["beam_left_1", "beam_right_1"],
     }
-
-
-# Ensure we can run from project root: uvicorn backend.main:app
-# Or from backend/: uvicorn main:app
 
 
 @app.get("/")
