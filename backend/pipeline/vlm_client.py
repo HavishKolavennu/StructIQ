@@ -1,8 +1,8 @@
 """
 VLM API client for StructIQ.
 
-Primary:  Kimi 2.5 via Moonshot AI (OpenAI-compatible, free tier).
-Fallback: Claude Vision (Anthropic) — activated when Kimi fails or is unconfigured.
+Primary:  Kimi 2.5 via Moonshot AI (OpenAI-compatible).
+Optional: Claude Vision (Anthropic) — set USE_CLAUDE_FALLBACK=true to enable.
 
 Public API:
     analyze_frame(frame_path, system_prompt, frame_prompt, frame_filename) -> dict
@@ -33,8 +33,8 @@ KIMI_MODEL: str = os.getenv("KIMI_MODEL", "moonshot-v1-128k-vision-preview")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL: str = os.getenv("CLAUDE_VISION_MODEL", "claude-sonnet-4-6")
 
-# Set USE_CLAUDE_FALLBACK=false to disable the Claude fallback entirely.
-USE_CLAUDE_FALLBACK: bool = os.getenv("USE_CLAUDE_FALLBACK", "true").lower() == "true"
+# Set USE_CLAUDE_FALLBACK=true to enable Claude fallback when Kimi fails.
+USE_CLAUDE_FALLBACK: bool = os.getenv("USE_CLAUDE_FALLBACK", "false").lower() == "true"
 
 # Maximum retries per provider before giving up / switching fallback.
 MAX_RETRIES: int = int(os.getenv("VLM_MAX_RETRIES", "2"))
