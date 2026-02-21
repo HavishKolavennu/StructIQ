@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Variables ───────────────────────────────────────────────────────── */
+:root {
+  --bg-primary:    #0a0c10;
+  --bg-card:       rgba(255,255,255,0.03);
+  --bg-card-hover: rgba(255,255,255,0.055);
+  --bg-elevated:   rgba(255,255,255,0.06);
+  --border-subtle: rgba(255,255,255,0.07);
+  --border-hover:  rgba(255,255,255,0.14);
+  --text-primary:  #F1F5F9;
+  --text-secondary:#94A3B8;
+  --text-muted:    #64748B;
+  --text-faint:    #475569;
+  --stage-complete:     #10B981;
+  --stage-progress:     #3B82F6;
+  --stage-delivered:    #F59E0B;
+  --stage-not-started:  #4B5563;
+  --stage-flagged:      #EF4444;
+}
+
+/* ─── Base ────────────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-primary);
+    background-image: radial-gradient(
+      ellipse at 30% 20%,
+      rgba(59, 130, 246, 0.04) 0%,
+      transparent 60%
+    );
+    color: var(--text-primary);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+}
+
+/* ─── Component Classes ───────────────────────────────────────────────────── */
+@layer components {
+
+  /* Work-package card — hover lift */
+  .wp-card {
+    position: relative;
+    overflow: hidden;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: linear-gradient(135deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.012) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 18px 20px 18px 26px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 10px;
+  }
+  .wp-card:hover {
+    border-color: var(--border-hover);
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+  }
+  .wp-card.selected {
+    border-color: rgba(99,102,241,0.45);
+    background: linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.03) 100%);
+  }
+
+  /* Ghost button */
+  .ghost-btn {
+    border: 1px solid rgba(255,255,255,0.14);
+    background: transparent;
+    color: #94A3B8;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.01em;
+  }
+  .ghost-btn:hover {
+    border-color: rgba(255,255,255,0.28);
+    background: rgba(255,255,255,0.05);
+    color: #E5E7EB;
+  }
+
+  /* Mono numbers / stats */
+  .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  /* Shimmer bar (progress bars that are in-progress) */
+  .shimmer-bar {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
+    animation: shimmer 2s infinite;
+  }
+
+  /* 3D viewer grid backdrop */
+  .viewer-grid {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* LIVE badge pulsing dot */
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10B981;
+    animation: pulse-live 2s infinite;
+  }
+
+  /* Element row hover */
+  .elem-row {
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+  .elem-row:hover {
+    border-color: rgba(255,255,255,0.1) !important;
+    background: rgba(255,255,255,0.025) !important;
+  }
+
+  /* Stat count animation */
+  .stat-animate {
+    animation: slideUpFade 0.5s ease both;
+  }
+}
+
+/* ─── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+  60%       { opacity: 0.85; box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+}
+@keyframes glow-progress {
+  0%, 100% { box-shadow: 0 0 8px rgba(16,185,129,0.3); }
+  50%       { box-shadow: 0 0 16px rgba(16,185,129,0.5); }
+}
