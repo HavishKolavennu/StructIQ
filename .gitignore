@@ -1,6 +1,29 @@
-.env
-venv/
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.claude/
+.venv/
+venv/
+*.egg-info/
+
+# Environment variables (never commit these)
+.env
+backend/.env
+
+# Test artifacts
+backend/test_frames/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Blender temp files
+*.blend1
