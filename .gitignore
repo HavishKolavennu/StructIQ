@@ -20,6 +20,7 @@ backend/.env
 
 # Test artifacts
 backend/test_frames/
+backend/processing/
 
 # OS
 .DS_Store
