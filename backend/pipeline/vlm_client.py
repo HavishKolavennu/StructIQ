@@ -1,7 +1,7 @@
 """
 VLM API client for StructIQ.
 
-Primary:  Kimi 2.5 via Moonshot AI (OpenAI-compatible, free tier).
+Primary:  Kimi K2.5 via api.kimi.com (Anthropic-compatible API).
 Fallback: Claude Vision (Anthropic) — activated when Kimi fails or is unconfigured.
 
 Public API:
@@ -25,10 +25,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 KIMI_API_KEY: str = os.getenv("KIMI_API_KEY", "")
-# Moonshot AI base URL (OpenAI-compatible). Set KIMI_BASE_URL to override.
-KIMI_BASE_URL: str = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
-# Adjust KIMI_MODEL if Moonshot releases a newer vision model.
-KIMI_MODEL: str = os.getenv("KIMI_MODEL", "moonshot-v1-128k-vision-preview")
+# Kimi API base URL (Anthropic-compatible). Set KIMI_BASE_URL to override.
+KIMI_BASE_URL: str = os.getenv("KIMI_BASE_URL", "https://api.kimi.com/coding")
+KIMI_MODEL: str = os.getenv("KIMI_MODEL", "kimi-k2.5")
 
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL: str = os.getenv("CLAUDE_VISION_MODEL", "claude-sonnet-4-6")
@@ -128,35 +127,36 @@ def _parse_and_validate(raw: str, frame_filename: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _call_kimi(image_b64: str, media_type: str, system_prompt: str, user_prompt: str) -> str:
-    """Send an image to Kimi 2.5 via Moonshot's OpenAI-compatible API."""
-    # Import lazily to avoid hard-crash if openai isn't installed yet.
+    """Send an image to Kimi K2.5 via Kimi's Anthropic-compatible API."""
     try:
-        from openai import OpenAI, RateLimitError as _OAIRateLimit, APIError as _OAIAPIError
+        import anthropic
     except ImportError as exc:
-        raise RuntimeError("openai package not installed. Run: pip install openai") from exc
+        raise RuntimeError("anthropic package not installed. Run: pip install anthropic") from exc
 
-    client = OpenAI(api_key=KIMI_API_KEY, base_url=KIMI_BASE_URL)
+    client = anthropic.Anthropic(api_key=KIMI_API_KEY, base_url=KIMI_BASE_URL)
 
-    response = client.chat.completions.create(
+    response = client.messages.create(
         model=KIMI_MODEL,
-        temperature=0.1,  # Low temp for deterministic structured output
+        max_tokens=1024,
+        system=system_prompt,
         messages=[
-            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{media_type};base64,{image_b64}",
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_b64,
                         },
                     },
                     {"type": "text", "text": user_prompt},
                 ],
-            },
+            }
         ],
     )
-    return response.choices[0].message.content or ""
+    return response.content[0].text if response.content else ""
 
 
 def _call_claude(image_b64: str, media_type: str, system_prompt: str, user_prompt: str) -> str:
