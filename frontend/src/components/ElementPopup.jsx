@@ -160,7 +160,7 @@ export default function ElementPopup({ element, onClose, onViewEvidence }) {
             marginBottom: 8,
           }}
         >
-          ⚠ Conflicting assessments across frames
+          Conflicting assessments across frames
         </div>
       )}
 
