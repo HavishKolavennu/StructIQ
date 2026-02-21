@@ -1,0 +1,24 @@
+# StructIQ backend dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9    # multipart file uploads
+
+# Data models
+pydantic>=2.0.0
+
+# VLM clients
+openai>=1.30.0             # Kimi 2.5 via Moonshot AI (OpenAI-compatible endpoint)
+anthropic>=0.28.0          # Claude Vision fallback + AI chat
+
+# Video / image processing (Chunk 4 — frame extraction & selection)
+opencv-python-headless>=4.9.0
+Pillow>=10.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Utilities
+httpx>=0.27.0              # async HTTP (used by FastAPI test client)
