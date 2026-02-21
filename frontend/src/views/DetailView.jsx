@@ -149,7 +149,11 @@ function FrameGallery({ frames }) {
         textAlign: 'center',
         color: 'var(--text-muted)',
       }}>
-        <div style={{ fontSize: 28, marginBottom: 10, opacity: 0.6 }}>🎞</div>
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ marginBottom: 10, opacity: 0.5 }}>
+          <rect x="2" y="6" width="24" height="16" rx="3" stroke="var(--text-muted)" strokeWidth="1.8"/>
+          <path d="M2 10h4M22 10h4M2 18h4M22 18h4" stroke="var(--text-muted)" strokeWidth="1.8" strokeLinecap="round"/>
+          <circle cx="14" cy="14" r="3" stroke="var(--text-muted)" strokeWidth="1.8"/>
+        </svg>
         <div style={{ fontSize: 13 }}>Element not visible in any captured frame</div>
       </div>
     )
@@ -206,7 +210,7 @@ function OverrideControls({ element, onOverride }) {
         </>
       ) : (
         <button onClick={() => setOpen(true)} className="btn-ghost" style={{ padding: '4px 12px', fontSize: 11 }}>
-          Change ✎
+          Change
         </button>
       )}
     </div>
@@ -352,7 +356,7 @@ function ElementRow({ element, selected, onClick, onOverride }) {
               marginBottom: 16,
               lineHeight: 1.5,
             }}>
-              ⚠ AI assessments conflicted across frames. The most frequent stage is shown.
+              AI assessments conflicted across frames. The most frequent stage is shown.
               Review frames below and use PM Override to correct if needed.
             </div>
           )}

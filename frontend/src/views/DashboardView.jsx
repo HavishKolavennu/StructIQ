@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Layout from '../components/Layout'
 import StageBadge from '../components/StageBadge'
 import ThreeViewer from '../components/ThreeViewer'
@@ -143,95 +143,106 @@ function SummaryStrip({ results }) {
 
 // ── WorkPackageCard ────────────────────────────────────────────────────────────
 function WorkPackageCard({ wp, selected, onClick }) {
-  const elements = wp.elements ?? []
+  const elements      = wp.elements ?? []
   const completeCount = elements.filter(e => e.stage === 'complete' || e.stage === 'inspected').length
-  const uncaptured = elements.filter(e => e.stage === 'not_captured').length
-  const stageColor = getStageColor(wp.overall_stage)
-  const progressPct = elements.length ? (completeCount / elements.length) * 100 : 0
-  const isInProgress = !['complete', 'inspected', 'not_started', 'not_captured'].includes(wp.overall_stage)
+  const uncaptured    = elements.filter(e => e.stage === 'not_captured').length
+  const conflicting   = elements.filter(e => e.conflicting).length
+  const stageColor    = getStageColor(wp.overall_stage)
 
   const stageLabel = wp.elements?.find(e => e.stage === wp.overall_stage)?.stage_label
     ?? wp.overall_stage?.replace(/_/g, ' ')
 
+  const typeTag = { beam: 'STRUCTURAL', pipe: 'PLUMBING', duct: 'HVAC', wall: 'FINISHES' }[elements[0]?.type] ?? 'GENERAL'
+
   return (
     <button className={`wp-card${selected ? ' selected' : ''}`} onClick={onClick}>
+
+      {/* Left accent bar */}
       <div style={{
         position: 'absolute',
         left: 0, top: 0, bottom: 0,
-        width: 3,
+        width: 4,
         background: stageColor,
         borderRadius: '10px 0 0 10px',
       }} />
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={{
-              color: 'var(--text-primary)',
-              fontWeight: 700,
-              fontSize: 15,
-              letterSpacing: '-0.01em',
-            }}>
-              {wp.name}
-            </span>
-            <StageBadge stage={wp.overall_stage} label={stageLabel} size="sm" />
-          </div>
+      {/* Top row — discipline tag + name + stage badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          flexShrink: 0,
+        }}>
+          {typeTag}
+        </span>
+        <span style={{
+          fontWeight: 700,
+          fontSize: 14,
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.01em',
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {wp.name}
+        </span>
+        <StageBadge stage={wp.overall_stage} label={stageLabel} size="sm" />
+      </div>
 
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10, fontWeight: 500 }}>
-            {wp.owner}
-          </div>
+      {/* Owner row */}
+      <div style={{
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        fontWeight: 500,
+        marginBottom: 12,
+      }}>
+        {wp.owner}
+      </div>
 
-          <div style={{ marginBottom: 8 }}>
-            <div style={{
-              height: 5,
-              borderRadius: 3,
-              background: 'var(--border-subtle)',
-              overflow: 'hidden',
-              position: 'relative',
-            }}>
-              <div
-                className={isInProgress && progressPct > 0 ? 'shimmer-bar' : ''}
-                style={{
-                  height: '100%',
-                  width: `${progressPct}%`,
-                  borderRadius: 3,
-                  background: progressPct === 100
-                    ? 'linear-gradient(90deg, var(--stage-complete), #34D399)'
-                    : `linear-gradient(90deg, ${stageColor}, ${hexToRgba(stageColor, 0.7)})`,
-                  transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              />
-            </div>
-          </div>
+      {/* Footer — progress count + tags + arrow */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        paddingTop: 10,
+        borderTop: '1px solid var(--border-subtle)',
+      }}>
+        <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ color: stageColor, fontWeight: 700 }}>{completeCount}</span>
+          {' / '}{elements.length} complete
+        </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{completeCount}</span>
-              /{elements.length} complete
-            </span>
+        {uncaptured > 0 && (
+          <span style={{
+            fontSize: 11, fontWeight: 600,
+            color: '#D97706',
+            background: 'rgba(245,158,11,0.08)',
+            border: '1px solid rgba(245,158,11,0.20)',
+            borderRadius: 4,
+            padding: '1px 7px',
+          }}>
+            {uncaptured} uncaptured
+          </span>
+        )}
 
-            {uncaptured > 0 && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '2px 8px',
-                borderRadius: 4,
-                background: 'rgba(245,158,11,0.08)',
-                border: '1px solid rgba(245,158,11,0.18)',
-                color: 'var(--stage-delivered)',
-                fontSize: 11,
-                fontWeight: 500,
-              }}>
-                ⚠ {uncaptured} not captured
-              </span>
-            )}
-          </div>
-        </div>
+        {conflicting > 0 && (
+          <span style={{
+            fontSize: 11, fontWeight: 600,
+            color: '#7C3AED',
+            background: 'rgba(124,58,237,0.07)',
+            border: '1px solid rgba(124,58,237,0.18)',
+            borderRadius: 4,
+            padding: '1px 7px',
+          }}>
+            {conflicting} conflict
+          </span>
+        )}
 
-        <span style={{ color: 'var(--border)', fontSize: 18, flexShrink: 0, marginTop: 3 }}>›</span>
+        <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1 }}>›</span>
       </div>
     </button>
   )
@@ -321,6 +332,22 @@ function ViewerLegend() {
 // ── DashboardView ──────────────────────────────────────────────────────────────
 export default function DashboardView({ results, onSelectWorkPackage, onNewUpload }) {
   const [selectedWpId, setSelectedWpId] = useState(null)
+  const [isFullscreen, setIsFullscreen]  = useState(false)
+  const viewerRef = useRef(null)
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      viewerRef.current?.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }
 
   const wps = results?.work_packages ?? []
 
@@ -414,9 +441,37 @@ export default function DashboardView({ results, onSelectWorkPackage, onNewUploa
                 Live
               </span>
             </span>
+
+            {/* Fullscreen toggle */}
+            <button
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                marginLeft: 'auto',
+                background: 'none',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 6,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                lineHeight: 1,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {isFullscreen ? (
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M5 1v4H1M8 1v4h4M1 8h4v4M8 8h4v4" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8" />
+                </svg>
+              )}
+            </button>
           </div>
 
-          <div style={{ flex: 1, position: 'relative', background: 'var(--bg-subtle)' }}>
+          <div ref={viewerRef} style={{ flex: 1, position: 'relative', background: 'var(--bg-subtle)' }}>
             <ThreeViewer
               workPackages={wps}
               showLegend={false}
@@ -448,7 +503,11 @@ function EmptyState() {
       textAlign: 'center',
       gap: 12,
     }}>
-      <div style={{ fontSize: 44, opacity: 0.6 }}>📋</div>
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" opacity="0.4">
+        <rect x="8" y="6" width="28" height="34" rx="4" stroke="var(--text-muted)" strokeWidth="2"/>
+        <path d="M16 6v4h12V6" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M14 20h16M14 27h10" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
       <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-secondary)' }}>No analysis results yet</div>
       <div style={{ fontSize: 13 }}>Upload a site walkthrough video to get started</div>
     </div>
