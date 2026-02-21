@@ -162,6 +162,8 @@ for (cx, cy) in [(-4.5, -3.5), (4.5, -3.5), (-4.5, 3.5), (4.5, 3.5)]:
 # North and south partial walls
 add_box("wall_north", location=(0,  4.1, 1.75), scale=(BAY_X, 0.20, 3.50), mat=mat_wall)
 add_box("wall_south", location=(0, -4.1, 1.75), scale=(BAY_X, 0.20, 3.50), mat=mat_wall)
+add_box("wall_east",  location=( 5.1, 0, 1.75), scale=(0.20, BAY_Y, 3.50), mat=mat_wall)
+add_box("wall_west",  location=(-5.1, 0, 1.75), scale=(0.20, BAY_Y, 3.50), mat=mat_wall)
 
 # ---------------------------------------------------------------------------
 # Tracked elements — names MUST match work_packages.py exactly
@@ -283,3 +285,4 @@ print("  Tracked elements exported:")
 print("    beam_central_1, beam_left_1, beam_right_1")
 print("    pipe_main_supply, pipe_branch_1, pipe_branch_2, pipe_drain_stack")
 print("    duct_hvac_main, duct_branch_north, duct_branch_south")
+print("    wall_north, wall_south, wall_east, wall_west")
