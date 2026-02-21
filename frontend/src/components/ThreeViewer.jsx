@@ -55,8 +55,14 @@ function BuildingModel({ elementMap, selectedId, onSelect }) {
       const isSelected = normId === selectedId || obj.name === selectedId
 
       // ── Classify this mesh ──────────────────────────────────────────────
-      const isWall = normId.startsWith('wall_')
+      const isTracked   = !!elem
+      const isWall      = normId.startsWith('wall_')
       const isBackground = normId.startsWith('floor_') || normId.startsWith('column_')
+        || normId.startsWith('sec_beam_') || normId.startsWith('baseplate_')
+        || normId.startsWith('conn_plate_')
+
+      // Decoration meshes (windows, scaffold, staging) keep their original GLB material
+      if (!isTracked && !isWall && !isBackground) return
 
       // Light theme: floor/columns use warm gray; walls + tracked elements use stage color
       const color = isBackground ? '#B8B2A8' : getStageColor(elem?.stage)
