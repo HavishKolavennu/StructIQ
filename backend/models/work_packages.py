@@ -158,6 +158,51 @@ PIPE_STAGES: list[StageDefinition] = [
     ),
 ]
 
+WALL_STAGES: list[StageDefinition] = [
+    StageDefinition(
+        id="not_started",
+        label="Not Started",
+        description="No wall framing present. Open floor space or only structural columns visible.",
+        order=0,
+    ),
+    StageDefinition(
+        id="framed",
+        label="Framed",
+        description="Metal or wood stud framing erected. Wall outline is complete but open — no insulation or drywall yet.",
+        order=1,
+    ),
+    StageDefinition(
+        id="insulated",
+        label="Insulated",
+        description="Insulation installed between studs. Batt or spray foam visible inside the framing cavity.",
+        order=2,
+    ),
+    StageDefinition(
+        id="drywalled",
+        label="Drywalled",
+        description="Drywall sheets attached to studs. Raw drywall visible — seams and screw heads not yet finished.",
+        order=3,
+    ),
+    StageDefinition(
+        id="taped_mudded",
+        label="Taped & Mudded",
+        description="Joints taped and mudded. Surface is smooth but unpainted — may show dried compound.",
+        order=4,
+    ),
+    StageDefinition(
+        id="painted",
+        label="Painted",
+        description="Wall is painted and finished. Clean uniform surface with no visible seams or compound.",
+        order=5,
+    ),
+    StageDefinition(
+        id="complete",
+        label="Complete",
+        description="All wall work finished including any trims, outlets, and fixtures.",
+        order=6,
+    ),
+]
+
 HVAC_STAGES: list[StageDefinition] = [
     StageDefinition(
         id="not_started",
@@ -298,6 +343,40 @@ DEMO_WORK_PACKAGES: list[WorkPackage] = [
                 name="South Branch",
                 type="duct",
                 work_package_id="wp_hvac_main",
+            ),
+        ],
+    ),
+    WorkPackage(
+        id="wp_wall_finishes",
+        name="Wall Finishes",
+        zone="floor_3",
+        owner="Interior Build Co",
+        element_type="wall",
+        stages=WALL_STAGES,
+        elements=[
+            Element(
+                id="wall_north",
+                name="North Wall",
+                type="wall",
+                work_package_id="wp_wall_finishes",
+            ),
+            Element(
+                id="wall_south",
+                name="South Wall",
+                type="wall",
+                work_package_id="wp_wall_finishes",
+            ),
+            Element(
+                id="wall_east",
+                name="East Wall",
+                type="wall",
+                work_package_id="wp_wall_finishes",
+            ),
+            Element(
+                id="wall_west",
+                name="West Wall",
+                type="wall",
+                work_package_id="wp_wall_finishes",
             ),
         ],
     ),
