@@ -196,19 +196,3 @@ python backend/pipeline/generate_qr_codes.py
 KIMI_API_KEY=...
 ANTHROPIC_API_KEY=...
 ```
-
----
-
-## Team
-
-Built in 36 hours at the Ironsite x Maryland Hackathon (February 2026) by:
-
-- [Team member names here]
-
-University of Maryland
-
----
-
-## Decisions Log
-
-Every architectural choice above was a deliberate tradeoff. Full decision records with context, alternatives considered, and reasoning are documented in our planning repo: [StructIQ-Agenda](https://github.com/HavishKolavennu/StructIQ-Agenda).
