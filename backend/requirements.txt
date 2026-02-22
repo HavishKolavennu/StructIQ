@@ -16,6 +16,10 @@ anthropic>=0.28.0          # Claude Vision fallback + AI chat
 # Video / image processing (Chunk 4 — frame extraction & selection)
 opencv-python-headless>=4.9.0
 Pillow>=10.0.0
+numpy>=1.26.0
+scikit-image>=0.22.0      # optional for SSIM (fallback exists if unavailable)
+pyzbar>=0.1.9             # QR detection (requires system libzbar0)
+qrcode[pil]>=8.0          # QR generation script for printed zone markers
 
 # Environment variables
 python-dotenv>=1.0.0
