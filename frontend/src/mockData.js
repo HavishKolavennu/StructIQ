@@ -9,6 +9,7 @@ export const MOCK_RESULTS = {
   job_id: 'demo_job_001',
   zone_id: 'floor_3',
   zone_label: 'Floor 3',
+  detected_zones: ['Floor 3 - Bay A', 'Floor 3 - Bay B'],
   processed_at: '2026-02-21T10:30:00.000Z',
   summary: {
     total_work_packages: 4,

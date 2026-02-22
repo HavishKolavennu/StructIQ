@@ -15,7 +15,10 @@ from __future__ import annotations
 from collections import Counter
 from typing import TypedDict
 
-from ..models.work_packages import WorkPackage
+try:
+    from ..models.work_packages import WorkPackage
+except ImportError:
+    from models.work_packages import WorkPackage
 
 # ---------------------------------------------------------------------------
 # Confidence constants

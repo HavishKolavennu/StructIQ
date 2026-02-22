@@ -30,3 +30,6 @@ Thumbs.db
 
 # Blender temp files
 *.blend1
+
+# Runtime storage artifacts
+backend/storage/

@@ -1,49 +1,49 @@
 import { useState } from 'react'
+import { uploadVideo, getResults } from '../../api'
 import VideoUploader from './VideoUploader'
-import ZoneSelector from './ZoneSelector'
 import ProcessingStatus from './ProcessingStatus'
 
-export default function UploadView({ onComplete, useMockData = true }) {
+export default function UploadView({ onComplete }) {
   const [file, setFile] = useState(null)
-  const [zoneId, setZoneId] = useState('')
   const [jobId, setJobId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
 
   const handleUpload = async () => {
-    if (!useMockData && (!file || !zoneId)) return
-    const effectiveZone = useMockData ? (zoneId || 'floor_3') : zoneId
-    if (!effectiveZone) return
+    if (!file) return
     setUploadError(null)
     setUploading(true)
-    if (useMockData) {
-      setZoneId(effectiveZone)
-      setJobId('mock-job-001')
-      setUploading(false)
-      return
-    }
+
     try {
-      const formData = new FormData()
-      formData.append('video', file)
-      formData.append('zone_id', effectiveZone)
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail ?? 'Upload failed')
+      const data = await uploadVideo(file)
       setJobId(data.job_id)
     } catch (err) {
       setUploadError(err.message ?? 'Upload failed')
-    } finally {
       setUploading(false)
     }
   }
 
-  const handleProcessingComplete = () => onComplete?.(jobId)
+  const handleProcessingComplete = async () => {
+    if (!jobId) return
+    try {
+      const results = await getResults(jobId)
+      onComplete?.(results)
+    } catch (err) {
+      setUploadError(err.message ?? 'Failed to load results')
+      setUploading(false)
+      setJobId(null)
+    }
+  }
+
+  const handleDemoResults = () => {
+    onComplete?.(null, { useDemo: true })
+  }
 
   if (jobId) {
     return (
       <div className="mx-auto max-w-2xl px-8 py-20 animate-slide-up">
         <h2 className="font-display text-2xl font-bold text-text-primary mb-6 tracking-wide">Processing your video</h2>
-        <ProcessingStatus jobId={jobId} onComplete={handleProcessingComplete} useMock={useMockData} />
+        <ProcessingStatus jobId={jobId} onComplete={handleProcessingComplete} />
       </div>
     )
   }
@@ -51,25 +51,25 @@ export default function UploadView({ onComplete, useMockData = true }) {
   return (
     <div className="mx-auto max-w-2xl px-8 py-20 animate-fade-in">
       <div className="mb-14">
-        <h1 className="font-display text-4xl font-bold tracking-wider text-text-primary mb-4">
-          Upload walkthrough video
-        </h1>
+        <h1 className="font-display text-4xl font-bold tracking-wider text-text-primary mb-4">Upload walkthrough video</h1>
         <p className="text-text-secondary text-lg leading-relaxed max-w-xl">
-          Select a zone and upload footage from your construction site. We'll extract frames, analyze progress, and show verifiable results.
+          Upload walkthrough footage only. StructIQ detects zones from QR codes and analyzes each zone automatically.
         </p>
       </div>
+
       <div className="space-y-6">
         <VideoUploader onFileSelect={setFile} selectedFile={file} disabled={uploading} />
-        <ZoneSelector value={zoneId} onChange={setZoneId} disabled={uploading} />
+
         {uploadError && (
           <div className="rounded-xl border border-stage-red/40 bg-stage-red/10 p-4 text-stage-red text-sm font-mono">
             {uploadError}
           </div>
         )}
+
         <button
           type="button"
           onClick={handleUpload}
-          disabled={!zoneId || (!useMockData && !file) || uploading}
+          disabled={!file || uploading}
           className="
             w-full rounded-xl px-6 py-4 font-display font-bold tracking-wider text-background
             bg-accent hover:bg-accent-dim
@@ -79,6 +79,14 @@ export default function UploadView({ onComplete, useMockData = true }) {
           "
         >
           {uploading ? 'Uploading...' : 'Upload and analyze'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDemoResults}
+          className="w-full rounded-xl border border-accent/30 bg-accent/5 px-6 py-3 font-mono text-accent hover:bg-accent/10 transition-all"
+        >
+          View demo results {'>'}
         </button>
       </div>
     </div>

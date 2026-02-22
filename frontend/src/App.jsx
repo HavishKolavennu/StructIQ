@@ -1,22 +1,17 @@
 import { useState } from 'react'
-import UploadView    from './views/UploadView'
-import DashboardView from './views/DashboardView'
-import DetailView    from './views/DetailView'
+import UploadView from './components/upload/UploadView'
+import DashboardView from './components/dashboard/DashboardView'
+import DetailView from './components/detail/DetailView'
+import Layout from './components/shared/Layout'
 import { MOCK_RESULTS } from './mockData'
 
-/**
- * App — top-level view router.
- *
- * upload → dashboard → detail → back to dashboard
- * All views render against MOCK_RESULTS until Chunk 8 wires real API calls.
- */
 export default function App() {
-  const [view,       setView]       = useState('upload')
-  const [results,    setResults]    = useState(null)
+  const [view, setView] = useState('upload')
+  const [results, setResults] = useState(null)
   const [selectedWp, setSelectedWp] = useState(null)
 
-  const handleUploadComplete = (results, opts) => {
-    setResults(opts?.useDemo ? MOCK_RESULTS : results)
+  const handleUploadComplete = (resultPayload, opts) => {
+    setResults(opts?.useDemo ? MOCK_RESULTS : resultPayload)
     setView('dashboard')
   }
 
@@ -36,33 +31,28 @@ export default function App() {
     setView('upload')
   }
 
+  if (view === 'upload') {
+    return (
+      <Layout>
+        <UploadView onComplete={handleUploadComplete} />
+      </Layout>
+    )
+  }
+
+  if (view === 'dashboard') {
+    return (
+      <Layout zoneLabel={results?.zone_label} processedAt={results?.processed_at} onNewUpload={handleNewUpload}>
+        <DashboardView
+          results={results}
+          onSelectWorkPackage={handleSelectWorkPackage}
+        />
+      </Layout>
+    )
+  }
+
   return (
-    <>
-      {view === 'upload' && (
-        <div style={{ animation: 'fadeIn 0.25s ease' }}>
-          <UploadView onComplete={handleUploadComplete} />
-        </div>
-      )}
-
-      {view === 'dashboard' && (
-        <div style={{ animation: 'fadeIn 0.25s ease', height: '100vh' }}>
-          <DashboardView
-            results={results}
-            onSelectWorkPackage={handleSelectWorkPackage}
-            onNewUpload={handleNewUpload}
-          />
-        </div>
-      )}
-
-      {view === 'detail' && selectedWp && (
-        <div style={{ animation: 'slideUp 0.25s ease', height: '100vh' }}>
-          <DetailView
-            workPackage={selectedWp}
-            results={results}
-            onBack={handleBackToDashboard}
-          />
-        </div>
-      )}
-    </>
+    <Layout zoneLabel={results?.zone_label} processedAt={results?.processed_at} showBack={handleBackToDashboard} onNewUpload={handleNewUpload}>
+      <DetailView workPackage={selectedWp} onBack={handleBackToDashboard} />
+    </Layout>
   )
 }
