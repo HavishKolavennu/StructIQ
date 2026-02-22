@@ -7,7 +7,7 @@ export default function DashboardHeader({ summary, zoneLabel, detectedZones = []
   return (
     <div className="flex flex-wrap items-end justify-between gap-6 mb-12">
       <div>
-        <h2 className="font-display text-2xl font-bold text-text-primary tracking-wider">Work packages</h2>
+        <h2 className="font-display text-2xl font-bold text-text-primary tracking-wider">Weekly Schedule</h2>
         <p className="text-text-secondary mt-1 font-mono">{progressText}</p>
         {total > 0 && (
           <div className="mt-4 h-1 w-56 rounded-full bg-surface overflow-hidden">
