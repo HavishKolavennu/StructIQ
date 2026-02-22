@@ -52,17 +52,20 @@ function BuildingModel({ elementMap, selectedId, onSelect }) {
 
       const normId     = normaliseId(obj.name)
       const elem       = elementMap[normId] ?? elementMap[obj.name]
-      const color      = getStageColor(elem?.stage)
       const isSelected = normId === selectedId || obj.name === selectedId
 
       // ── Classify this mesh ──────────────────────────────────────────────
-      // Walls are large enclosing boxes — make them ghost-transparent so
-      // interior elements (beams, pipes, ducts) are clearly visible.
-      const isWall = normId.startsWith('wall_')
-
-      // Floor slab and columns are structural context — almost invisible,
-      // just enough to give a sense of the floor plane.
+      const isTracked   = !!elem
+      const isWall      = normId.startsWith('wall_')
       const isBackground = normId.startsWith('floor_') || normId.startsWith('column_')
+        || normId.startsWith('sec_beam_') || normId.startsWith('baseplate_')
+        || normId.startsWith('conn_plate_')
+
+      // Decoration meshes (windows, scaffold, staging) keep their original GLB material
+      if (!isTracked && !isWall && !isBackground) return
+
+      // Light theme: floor/columns use warm gray; walls + tracked elements use stage color
+      const color = isBackground ? '#B8B2A8' : getStageColor(elem?.stage)
 
       // ── Build material ──────────────────────────────────────────────────
       let opacity     = 1.0
@@ -74,19 +77,19 @@ function BuildingModel({ elementMap, selectedId, onSelect }) {
       let metalness   = 0.2
 
       if (isBackground) {
-        // Barely-there floor / columns
-        opacity     = 0.07
+        // Light theme: subtle warm gray floor/columns
+        opacity     = 0.15
         transparent = true
         depthWrite  = false
         side        = THREE.DoubleSide
         emissiveInt = 0
       } else if (isWall) {
-        // Ghost walls — show stage colour at low opacity so interior is visible
-        opacity     = 0.18
+        // Light theme: ghost walls — warm gray, low opacity
+        opacity     = 0.22
         transparent = true
         depthWrite  = false
         side        = THREE.DoubleSide
-        emissiveInt = isSelected ? 0.3 : 0.05  // slight self-glow so colour reads
+        emissiveInt = isSelected ? 0.2 : 0.02
         roughness   = 0.8
         metalness   = 0.0
       } else {
@@ -137,14 +140,14 @@ function LoadingOverlay() {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       gap: 12,
-      color: '#475569',
+      color: 'var(--text-muted)',
       fontSize: 13,
       fontFamily: 'DM Sans, sans-serif',
     }}>
       <div style={{
         width: 28, height: 28,
-        border: '2px solid rgba(99,102,241,0.3)',
-        borderTopColor: '#6366F1',
+        border: '2px solid rgba(245,158,11,0.25)',
+        borderTopColor: '#F59E0B',
         borderRadius: '50%',
         animation: 'spin 0.9s linear infinite',
       }} />
@@ -186,17 +189,18 @@ export default function ThreeViewer({ workPackages = [], onElementSelect, showLe
   const selectedElement = selectedId ? (elementMap[selectedId] ?? elementMap[`${selectedId}_mesh`]) : null
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#0a0c10' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: 'var(--bg-subtle)' }}>
       <Canvas
         camera={{ position: [14, 9, 14], fov: 48, near: 0.1, far: 200 }}
         onPointerMissed={() => setSelectedId(null)}
         style={{ background: 'transparent' }}
+        gl={{ alpha: false }}
       >
+        {/* Scene background — cream to match light theme */}
+        <color attach="background" args={['#F5F2EB']} />
         {/* ── Lighting ────────────────────────────────────────────────────
-            Strong ambient + an interior point light ensures every face of
-            every element shows its stage colour regardless of orientation.
-            The four directionals cover all six cube faces.           ── */}
-        <ambientLight intensity={1.1} />
+            Brighter ambient for light theme; point + directionals for depth. */}
+        <ambientLight intensity={1.4} />
 
         {/* Interior point light — sits in the middle of the bay at mid-height
             so beams / pipes / ducts glowing from inside the wall envelope */}
@@ -245,18 +249,19 @@ export default function ThreeViewer({ workPackages = [], onElementSelect, showLe
           top:           12,
           left:          '50%',
           transform:     'translateX(-50%)',
-          background:    'rgba(10,12,16,0.75)',
+          background:    'rgba(255,253,249,0.95)',
           backdropFilter:'blur(8px)',
-          border:        '1px solid rgba(255,255,255,0.08)',
+          border:        '1px solid var(--border)',
           borderRadius:  8,
-          padding:       '5px 14px',
-          color:         '#475569',
+          padding:       '6px 16px',
+          color:         'var(--text-muted)',
           fontSize:      11,
           fontWeight:    500,
           fontFamily:    'DM Sans, sans-serif',
           whiteSpace:    'nowrap',
           pointerEvents: 'none',
           letterSpacing: '0.01em',
+          boxShadow:     '0 2px 8px rgba(0,0,0,0.06)',
         }}>
           Click an element to inspect
         </div>
@@ -293,27 +298,28 @@ function InternalLegend() {
     <div style={{
       position:       'absolute',
       bottom:         12, left: 12,
-      background:     'rgba(10,12,16,0.85)',
+      background:     'rgba(255,253,249,0.95)',
       backdropFilter: 'blur(10px)',
-      border:         '1px solid rgba(255,255,255,0.08)',
-      borderRadius:   8,
-      padding:        '10px 14px',
+      border:         '1px solid var(--border)',
+      borderRadius:   10,
+      padding:        '12px 16px',
       zIndex:         10,
+      boxShadow:      '0 2px 8px rgba(0,0,0,0.06)',
     }}>
       <div style={{
-        color:         '#475569',
+        color:         'var(--text-muted)',
         fontSize:      10,
         fontWeight:    700,
         textTransform: 'uppercase',
         letterSpacing: '0.1em',
-        marginBottom:  7,
+        marginBottom:  8,
       }}>
         Stage Legend
       </div>
       {LEGEND_ITEMS.map(({ color, label }) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-          <span style={{ color: '#64748B', fontSize: 11 }}>{label}</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{label}</span>
         </div>
       ))}
     </div>

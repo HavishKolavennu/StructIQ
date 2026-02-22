@@ -22,6 +22,7 @@ backend/.env
 backend/test_frames/
 processing/
 qr_codes/
+backend/processing/
 
 # OS
 .DS_Store
