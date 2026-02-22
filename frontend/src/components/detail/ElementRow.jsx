@@ -16,14 +16,14 @@ export default function ElementRow({ element, isSelected, onSelect }) {
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h4 className="font-display font-semibold text-text-primary tracking-wide">{element.name}</h4>
-          <p className="text-sm text-text-muted mt-0.5 font-mono">{element.type}</p>
-        </div>
-        <div className="flex items-center gap-4 flex-shrink-0">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <h4 className="font-display font-semibold text-text-primary tracking-wide truncate">{element.name}</h4>
           <ConfidenceIndicator confidence={element.confidence} />
-          <StageBadge stage={element.stage} stageLabel={element.stage_label} size="default" />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-text-muted font-mono truncate">{element.type}</p>
+          <StageBadge stage={element.stage} stageLabel={element.stage_label} size="sm" />
         </div>
       </div>
     </div>

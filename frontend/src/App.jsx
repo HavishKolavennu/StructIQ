@@ -9,6 +9,7 @@ export default function App() {
   const [view, setView] = useState('upload')
   const [results, setResults] = useState(null)
   const [selectedWp, setSelectedWp] = useState(null)
+  const [selectedElementId, setSelectedElementId] = useState(null)
 
   const handleUploadComplete = (resultPayload, opts) => {
     setResults(opts?.useDemo ? MOCK_RESULTS : resultPayload)
@@ -16,12 +17,26 @@ export default function App() {
   }
 
   const handleSelectWorkPackage = (wp) => {
+    setSelectedElementId(null)
     setSelectedWp(wp)
     setView('detail')
   }
 
+  const handleSelectElement = (elementId) => {
+    const workPackages = results?.work_packages ?? []
+    for (const wp of workPackages) {
+      if (wp.elements?.some(el => el.id === elementId)) {
+        setSelectedElementId(elementId)
+        setSelectedWp(wp)
+        setView('detail')
+        return
+      }
+    }
+  }
+
   const handleBackToDashboard = () => {
     setSelectedWp(null)
+    setSelectedElementId(null)
     setView('dashboard')
   }
 
@@ -45,6 +60,7 @@ export default function App() {
         <DashboardView
           results={results}
           onSelectWorkPackage={handleSelectWorkPackage}
+          onSelectElement={handleSelectElement}
         />
       </Layout>
     )
@@ -52,7 +68,7 @@ export default function App() {
 
   return (
     <Layout zoneLabel={results?.zone_label} processedAt={results?.processed_at} showBack={handleBackToDashboard} onNewUpload={handleNewUpload}>
-      <DetailView workPackage={selectedWp} onBack={handleBackToDashboard} />
+      <DetailView workPackage={selectedWp} initialElementId={selectedElementId} onBack={handleBackToDashboard} />
     </Layout>
   )
 }

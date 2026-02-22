@@ -31,7 +31,18 @@ export default function StageBadge({ stage, stageLabel, size = 'default' }) {
     lg: 'px-4 py-2 text-base font-mono font-medium',
   }
 
-  const label = stageLabel ?? stage?.replace(/_/g, ' ') ?? 'Unknown'
+  const SHORT_LABELS = {
+    rough_in_complete:  'Rough In ✓',
+    rough_in_started:   'Rough In',
+    materials_on_site:  'On Site',
+    branches_complete:  'Branched',
+    pressure_tested:    'Tested',
+    duct_installed:     'Installed',
+    not_captured:       'Unknown',
+    not_started:        'Not Started',
+    in_progress:        'In Progress',
+  }
+  const label = stageLabel ?? SHORT_LABELS[stage] ?? stage?.replace(/_/g, ' ') ?? 'Unknown'
 
   return (
     <span
