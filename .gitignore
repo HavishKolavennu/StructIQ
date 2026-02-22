@@ -20,6 +20,8 @@ backend/.env
 
 # Test artifacts
 backend/test_frames/
+processing/
+qr_codes/
 backend/processing/
 
 # OS
