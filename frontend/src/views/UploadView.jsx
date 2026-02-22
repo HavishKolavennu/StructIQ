@@ -18,8 +18,8 @@ const STEP_PROGRESS = {
   error: 0,
 }
 
-// ── ImageUploader ──────────────────────────────────────────────────────────────
-function ImageUploader({ files, onFiles }) {
+// ── VideoUploader ──────────────────────────────────────────────────────────────
+function VideoUploader({ files, onFiles }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
@@ -27,9 +27,9 @@ function ImageUploader({ files, onFiles }) {
     e.preventDefault()
     setDragging(false)
     const dropped = Array.from(e.dataTransfer.files).filter(f =>
-      f.type.startsWith('image/')
+      f.type.startsWith('video/')
     )
-    if (dropped.length) onFiles(dropped)
+    if (dropped.length) onFiles([dropped[0]])
   }, [onFiles])
 
   const handleDrag = useCallback((e) => {
@@ -39,8 +39,11 @@ function ImageUploader({ files, onFiles }) {
 
   const handleChange = useCallback((e) => {
     const selected = Array.from(e.target.files || [])
-    if (selected.length) onFiles(selected)
+    if (selected.length) onFiles([selected[0]])
   }, [onFiles])
+
+  const file = files?.[0] ?? null
+  const sizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : null
 
   return (
     <div
@@ -49,14 +52,14 @@ function ImageUploader({ files, onFiles }) {
       onDragOver={handleDrag}
       onDragLeave={handleDrag}
       style={{
-        border: `2px dashed ${dragging ? 'var(--accent)' : files?.length ? 'var(--stage-complete)' : 'var(--border)'}`,
+        border: `2px dashed ${dragging ? 'var(--accent)' : file ? 'var(--stage-complete)' : 'var(--border)'}`,
         borderRadius: 12,
         padding: '44px 32px',
         textAlign: 'center',
         cursor: 'pointer',
         background: dragging
           ? 'rgba(245,158,11,0.04)'
-          : files?.length
+          : file
             ? 'rgba(16,185,129,0.04)'
             : 'var(--bg-subtle)',
         transition: 'all 0.2s ease',
@@ -65,69 +68,56 @@ function ImageUploader({ files, onFiles }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/jpg"
-        multiple
+        accept="video/mp4,video/quicktime,video/avi,video/mov,video/*"
         style={{ display: 'none' }}
         onChange={handleChange}
       />
 
-      {files?.length ? (
+      {file ? (
         <>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              margin: '0 auto 14px',
-              borderRadius: 12,
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--stage-complete)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div style={{
+            width: 48, height: 48,
+            margin: '0 auto 14px',
+            borderRadius: 12,
+            background: 'rgba(16,185,129,0.1)',
+            border: '1px solid rgba(16,185,129,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--stage-complete)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 15, letterSpacing: '-0.01em' }}>
-            {files.length} image{files.length !== 1 ? 's' : ''} selected
+            Video selected
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-            {files.map(f => f.name).join(', ').slice(0, 50)}
-            {(files.reduce((a, f) => a + f.name.length, 0) > 50) ? '...' : ''}
+            {file.name}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-            Click to replace
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
+            {sizeMB} MB · Click to replace
           </div>
         </>
       ) : (
         <>
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              margin: '0 auto 18px',
-              borderRadius: 12,
-              background: 'rgba(245,158,11,0.08)',
-              border: '1px solid rgba(245,158,11,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <div style={{
+            width: 52, height: 52,
+            margin: '0 auto 18px',
+            borderRadius: 12,
+            background: 'rgba(245,158,11,0.08)',
+            border: '1px solid rgba(245,158,11,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="M21 15l-5-5L5 21" />
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" />
             </svg>
           </div>
           <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 16, marginBottom: 6 }}>
-            Drop construction site images here
+            Drop your site walkthrough video here
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
             or <span style={{ color: 'var(--accent)', fontWeight: 600 }}>click to browse</span>
-            {' '}— JPG, PNG
+            {' '}— MP4, MOV, AVI
           </div>
         </>
       )}
@@ -278,12 +268,12 @@ export default function UploadView({ onComplete }) {
 
   const handleUpload = async () => {
     if (!files?.length) {
-      setError('Please select at least one image.')
+      setError('Please select a video file.')
       return
     }
     setError(null)
     setUploading(true)
-    setStatus({ step: 'starting', detail: 'Uploading images...' })
+    setStatus({ step: 'starting', detail: 'Uploading video...' })
 
     try {
       const { job_id } = await uploadImages(files, zone)
@@ -386,7 +376,7 @@ export default function UploadView({ onComplete }) {
               <span style={{ color: 'var(--accent)' }}>intelligently tracked</span>
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: 15, margin: 0, lineHeight: 1.6, maxWidth: 400, marginLeft: 'auto', marginRight: 'auto' }}>
-              Upload construction site images for AI-powered analysis of beams, pipes, ducts, and walls.
+              Upload a site walkthrough video for AI-powered analysis of beams, pipes, ducts, and walls.
             </p>
           </div>
 
@@ -404,7 +394,7 @@ export default function UploadView({ onComplete }) {
           >
             {!uploading ? (
               <>
-                <ImageUploader files={files} onFiles={setFiles} />
+                <VideoUploader files={files} onFiles={setFiles} />
                 <ZoneSelector value={zone} onChange={setZone} />
 
                 {error && (
@@ -432,7 +422,7 @@ export default function UploadView({ onComplete }) {
                     fontSize: 15,
                   }}
                 >
-                  {files?.length ? `Analyze ${files.length} image${files.length !== 1 ? 's' : ''}` : 'Select images to continue'}
+                  {files?.length ? 'Analyze video' : 'Select a video to continue'}
                 </button>
 
                 <button
@@ -463,7 +453,7 @@ export default function UploadView({ onComplete }) {
                 flexWrap: 'wrap',
               }}
             >
-              {['AI Frame Analysis', 'Stage Detection', 'Frame Evidence', '3D Model'].map(f => (
+              {['Video Frame Extraction', 'AI Stage Detection', 'Frame Evidence', '3D Site Model'].map(f => (
                 <span
                   key={f}
                   style={{
