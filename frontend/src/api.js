@@ -5,20 +5,20 @@
 
 const API_BASE = '/api'
 
-export async function uploadImages(files, zoneId) {
+export async function uploadVideo(file) {
   const formData = new FormData()
-  formData.append('zone_id', zoneId)
-  for (const file of files) {
-    formData.append('images', file)
-  }
+  formData.append('video', file)
+
   const res = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
     body: formData,
   })
+
   if (!res.ok) {
     const err = await res.text()
     throw new Error(err || `Upload failed: ${res.status}`)
   }
+
   return res.json()
 }
 

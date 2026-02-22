@@ -1,5 +1,11 @@
 import WorkPackageCard from './WorkPackageCard'
 
+function formatZoneLabel(zoneId) {
+  return zoneId
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export default function WorkPackageList({ workPackages, onSelectWorkPackage }) {
   if (!workPackages?.length) {
     return (
@@ -9,20 +15,22 @@ export default function WorkPackageList({ workPackages, onSelectWorkPackage }) {
       </div>
     )
   }
+
   const byZone = workPackages.reduce((acc, wp) => {
-    const zone = wp.zone ?? 'unknown'
+    const zone = wp.zone ?? 'unknown_zone'
     if (!acc[zone]) acc[zone] = []
     acc[zone].push(wp)
     return acc
   }, {})
-  const zoneLabels = { floor_1: 'Floor 1', floor_2: 'Floor 2', floor_3: 'Floor 3' }
+
   let cardIndex = 0
+
   return (
     <div className="space-y-10">
       {Object.entries(byZone).map(([zoneId, packages]) => (
         <div key={zoneId}>
           <h3 className="text-xs font-mono text-accent/80 uppercase tracking-widest mb-4">
-            {zoneLabels[zoneId] ?? zoneId}
+            {formatZoneLabel(zoneId)}
           </h3>
           <div className="space-y-4">
             {packages.map((wp) => (
