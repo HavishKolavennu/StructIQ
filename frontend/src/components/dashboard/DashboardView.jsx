@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import DashboardHeader from './DashboardHeader'
-import WorkPackageList from './WorkPackageList'
+import WeeklyScheduleView from './WeeklyScheduleView'
 import ThreeViewer from '../ThreeViewer'
 
 export default function DashboardView({ results, onSelectWorkPackage, onSelectElement }) {
@@ -64,7 +64,7 @@ export default function DashboardView({ results, onSelectWorkPackage, onSelectEl
     <div className="flex h-[calc(100vh-4rem)]">
       <div className="flex-1 overflow-y-auto p-10 min-w-0">
         <DashboardHeader summary={summary} zoneLabel={zoneLabel} detectedZones={detectedZones} />
-        <WorkPackageList workPackages={workPackages} onSelectWorkPackage={onSelectWorkPackage} />
+        <WeeklyScheduleView workPackages={workPackages} onSelectWorkPackage={onSelectWorkPackage} />
       </div>
 
       <div className="w-[42%] min-w-[360px] border-l border-accent/10 bg-accent/[0.02]">

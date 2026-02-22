@@ -21,6 +21,9 @@ export default function StageBadge({ stage, stageLabel, size = 'default' }) {
     not_captured: 'bg-stage-gray/20 text-stage-gray border-stage-gray/40',
     unclear: 'bg-stage-gray/20 text-stage-gray border-stage-gray/40',
     flagged: 'bg-stage-red/20 text-stage-red border-stage-red/40',
+    framed:      'bg-stage-blue/20 text-stage-blue border-stage-blue/40',
+    drywalled:   'bg-stage-blue/20 text-stage-blue border-stage-blue/40',
+    delivered:   'bg-stage-amber/20 text-stage-amber border-stage-amber/40',
   }
 
   const colorClass = stageColors[stage] ?? 'bg-stage-gray/20 text-stage-gray border-stage-gray/40'
@@ -41,6 +44,9 @@ export default function StageBadge({ stage, stageLabel, size = 'default' }) {
     not_captured:       'Unknown',
     not_started:        'Not Started',
     in_progress:        'In Progress',
+    framed:             'Framed',
+    drywalled:          'Drywalled',
+    delivered:          'Delivered',
   }
   const label = stageLabel ?? SHORT_LABELS[stage] ?? stage?.replace(/_/g, ' ') ?? 'Unknown'
 
