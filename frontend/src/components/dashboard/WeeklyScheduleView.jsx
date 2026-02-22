@@ -14,6 +14,62 @@ const TRADE_COLORS = {
   'General Conditions': 'text-gray-600   bg-gray-50    border-gray-200',
 }
 
+const PROGRESS_STAGES = new Set([
+  'delivered',
+  'materials_on_site',
+  'placed',
+  'braced',
+  'connected',
+  'rough_in_started',
+  'rough_in_complete',
+  'pressure_tested',
+  'duct_installed',
+  'branches_complete',
+  'balanced',
+  'framed',
+  'insulated',
+  'drywalled',
+  'taped_mudded',
+  'painted',
+  'in_progress',
+])
+
+function inferStageFromElements(elements = []) {
+  if (!elements.length) return 'unknown'
+  const stages = elements.map((e) => e.stage).filter(Boolean)
+  if (!stages.length) return 'unknown'
+  if (stages.every((s) => s === 'complete')) return 'complete'
+  if (stages.every((s) => s === 'not_started')) return 'not_started'
+  if (stages.every((s) => s === 'not_captured')) return 'not_captured'
+  if (stages.some((s) => PROGRESS_STAGES.has(s))) return 'in_progress'
+  return stages[0]
+}
+
+function getStatusMeta(stage) {
+  if (stage === 'complete' || stage === 'inspected') {
+    return {
+      label: 'Complete',
+      className: 'text-green-700 bg-green-50 border-green-200',
+    }
+  }
+  if (stage === 'not_started') {
+    return {
+      label: 'Not Started',
+      className: 'text-slate-600 bg-slate-50 border-slate-200',
+    }
+  }
+  if (stage === 'not_captured' || stage === 'unknown') {
+    return {
+      label: 'Unknown',
+      className: 'text-slate-600 bg-slate-100 border-slate-300',
+    }
+  }
+  return {
+    label: 'In Progress',
+    className: 'text-amber-700 bg-amber-50 border-amber-200',
+  }
+}
+
 export default function WeeklyScheduleView({ workPackages, onSelectWorkPackage }) {
   const [selectedWeek, setSelectedWeek] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
@@ -76,6 +132,8 @@ export default function WeeklyScheduleView({ workPackages, onSelectWorkPackage }
 function WeeklyTaskCard({ workPackage, isExpanded, onToggle, onOpenDetail, animationDelay }) {
   const [selectedElement, setSelectedElement] = useState(workPackage.elements?.[0] ?? null)
   const tradeClass = TRADE_COLORS[workPackage.trade_category] ?? 'text-gray-600 bg-gray-50 border-gray-200'
+  const effectiveStage = workPackage.overall_stage || inferStageFromElements(workPackage.elements)
+  const statusMeta = getStatusMeta(effectiveStage)
 
   return (
     <div
@@ -105,11 +163,22 @@ function WeeklyTaskCard({ workPackage, isExpanded, onToggle, onOpenDetail, anima
           <div className="font-display font-semibold text-text-primary tracking-wide truncate">
             {workPackage.name}
           </div>
-          {workPackage.description && (
-            <div className="text-xs text-text-muted mt-0.5 font-mono truncate">
-              {workPackage.description}
-            </div>
-          )}
+          <div className="text-xs text-text-muted mt-0.5 font-mono truncate">
+            {workPackage.description || `Owner: ${workPackage.owner || 'Unassigned'}`}
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            {workPackage.trade_category && (
+              <span className={`inline-flex text-[11px] font-mono px-2 py-0.5 rounded border ${tradeClass}`}>
+                {workPackage.trade_category}
+              </span>
+            )}
+            <span className={`inline-flex text-[11px] font-mono px-2 py-0.5 rounded border ${statusMeta.className}`}>
+              {statusMeta.label}
+            </span>
+            <span className="inline-flex text-[11px] font-mono px-2 py-0.5 rounded border text-gray-600 bg-gray-50 border-gray-200">
+              {workPackage.owner || 'Unassigned Owner'}
+            </span>
+          </div>
         </div>
 
         {/* Trade chip */}
@@ -120,7 +189,7 @@ function WeeklyTaskCard({ workPackage, isExpanded, onToggle, onOpenDetail, anima
         )}
 
         {/* Stage badge */}
-        <StageBadge stage={workPackage.overall_stage} size="sm" />
+        <StageBadge stage={effectiveStage} size="sm" />
       </button>
 
       {/* ── Expanded detail ── */}

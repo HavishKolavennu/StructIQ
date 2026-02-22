@@ -297,8 +297,11 @@ def _assemble_results(
             {
                 "id": wp.id,
                 "name": wp.name,
+                "description": wp.description,
                 "zone": wp.zone,
                 "owner": wp.owner,
+                "trade_category": wp.trade_category,
+                "week": wp.week,
                 "overall_stage": overall_stage,
                 "elements": elements_out,
             }

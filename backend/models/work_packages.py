@@ -40,8 +40,11 @@ class WorkPackage(BaseModel):
     """
     id: str
     name: str
+    description: str = ""     # Short subtitle shown on dashboard cards
     zone: str               # e.g. "floor_3"
     owner: str              # Responsible subcontractor
+    trade_category: Optional[str] = None
+    week: Optional[int] = None
     element_type: str       # Dominant element type: "beam", "pipe", "duct", "wall"
     stages: list[StageDefinition]
     elements: list[Element]
@@ -259,8 +262,11 @@ DEMO_WORK_PACKAGES: list[WorkPackage] = [
     WorkPackage(
         id="wp_beam_layout",
         name="Beam Layout",
+        description="Layout verification and progressive placement of primary structural beams in the active bay.",
         zone="floor_3",
         owner="Joe's Structural LLC",
+        trade_category="Structural",
+        week=1,
         element_type="beam",
         stages=BEAM_STAGES,
         elements=[
@@ -287,8 +293,11 @@ DEMO_WORK_PACKAGES: list[WorkPackage] = [
     WorkPackage(
         id="wp_plumbing_roughin",
         name="Plumbing Rough-In",
+        description="Rough-in routing, branch connections, and drain stack readiness for inspection.",
         zone="floor_3",
         owner="Allied Mechanical",
+        trade_category="Plumbing",
+        week=2,
         element_type="pipe",
         stages=PIPE_STAGES,
         elements=[
@@ -321,8 +330,11 @@ DEMO_WORK_PACKAGES: list[WorkPackage] = [
     WorkPackage(
         id="wp_hvac_main",
         name="HVAC Ductwork",
+        description="Main duct trunk installation with branch readiness tracked across the zone.",
         zone="floor_3",
         owner="CoolAir Systems",
+        trade_category="HVAC",
+        week=3,
         element_type="duct",
         stages=HVAC_STAGES,
         elements=[
@@ -349,8 +361,11 @@ DEMO_WORK_PACKAGES: list[WorkPackage] = [
     WorkPackage(
         id="wp_wall_finishes",
         name="Wall Finishes",
+        description="Stud framing through drywall finish progression for perimeter and interior walls.",
         zone="floor_3",
         owner="Interior Build Co",
+        trade_category="Finishes",
+        week=4,
         element_type="wall",
         stages=WALL_STAGES,
         elements=[
