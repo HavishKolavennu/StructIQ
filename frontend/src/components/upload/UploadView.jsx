@@ -5,7 +5,7 @@ import ProcessingStatus from './ProcessingStatus'
 
 export default function UploadView({ onComplete }) {
   const [file, setFile] = useState(null)
-  const [demoMode, setDemoMode] = useState(true)
+  const [demoMode, setDemoMode] = useState(false)
   const [jobId, setJobId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
