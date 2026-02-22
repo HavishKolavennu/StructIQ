@@ -6,7 +6,7 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -50,7 +50,11 @@ async def root() -> dict:
 
 
 @app.post("/api/upload")
-async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = File(...)) -> dict:
+async def upload_video(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(...),
+    demo_mode: bool = Form(False),
+) -> dict:
     """Accepts one video file, creates a processing job, starts background pipeline."""
     if not video.filename:
         raise HTTPException(status_code=400, detail="Video filename is missing.")
@@ -76,9 +80,10 @@ async def upload_video(background_tasks: BackgroundTasks, video: UploadFile = Fi
         "error_message": None,
         "results_path": None,
         "upload_path": str(dest),
+        "demo_mode": demo_mode,
     }
 
-    background_tasks.add_task(run_pipeline, job_id, dest, JOBS)
+    background_tasks.add_task(run_pipeline, job_id, dest, JOBS, demo_mode)
 
     return {
         "job_id": job_id,
@@ -100,6 +105,7 @@ async def get_status(job_id: str) -> dict:
         "detected_zones": job.get("detected_zones", []),
         "progress_detail": job.get("progress_detail", ""),
         "selected_frame_count": job.get("selected_frame_count", 0),
+        "demo_mode": job.get("demo_mode", False),
         "error_message": job.get("error_message"),
     }
 

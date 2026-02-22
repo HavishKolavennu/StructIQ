@@ -87,6 +87,9 @@ export default function ProcessingStatus({ jobId, onComplete }) {
         <div>
           <p className="font-display font-semibold text-text-primary text-lg tracking-wide">{stepLabel}{dots}</p>
           <p className="text-sm text-text-secondary mt-1 font-mono">{status.progress_detail}</p>
+          {status.demo_mode && (
+            <p className="text-xs text-accent mt-1 font-mono">Demo mode enabled</p>
+          )}
           {status.selected_frame_count > 0 && (
             <p className="text-sm text-accent mt-1 font-mono">{status.selected_frame_count} frames selected</p>
           )}

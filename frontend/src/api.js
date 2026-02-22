@@ -5,9 +5,10 @@
 
 const API_BASE = '/api'
 
-export async function uploadVideo(file) {
+export async function uploadVideo(file, opts = {}) {
   const formData = new FormData()
   formData.append('video', file)
+  formData.append('demo_mode', String(Boolean(opts.demoMode)))
 
   const res = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
