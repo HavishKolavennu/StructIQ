@@ -4,8 +4,12 @@ import ElementRow from './ElementRow'
 import FrameGallery from './FrameGallery'
 import OverrideControls from './OverrideControls'
 
-export default function DetailView({ workPackage, onBack }) {
-  const [selectedElement, setSelectedElement] = useState(workPackage?.elements?.[0] ?? null)
+export default function DetailView({ workPackage, initialElementId, onBack }) {
+  const [selectedElement, setSelectedElement] = useState(
+    (initialElementId && workPackage?.elements?.find(e => e.id === initialElementId))
+      ?? workPackage?.elements?.[0]
+      ?? null
+  )
   const [overrides, setOverrides] = useState({})
 
   const getElementWithOverride = (el) => {
