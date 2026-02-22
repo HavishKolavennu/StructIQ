@@ -14,6 +14,8 @@ const STEP_LABELS = {
 export default function ProcessingStatus({ jobId, onComplete }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
+  const [animatedProgress, setAnimatedProgress] = useState(8)
+  const [dotCount, setDotCount] = useState(1)
 
   useEffect(() => {
     if (!jobId) return
@@ -38,6 +40,17 @@ export default function ProcessingStatus({ jobId, onComplete }) {
     return () => clearInterval(iv)
   }, [jobId, onComplete])
 
+  useEffect(() => {
+    if (!status || status.status !== 'processing') return
+
+    const iv = setInterval(() => {
+      setAnimatedProgress((prev) => (prev >= 94 ? 24 : prev + 3))
+      setDotCount((prev) => (prev % 3) + 1)
+    }, 130)
+
+    return () => clearInterval(iv)
+  }, [status])
+
   if (error) {
     return (
       <div className="rounded-xl border border-stage-red/40 bg-stage-red/10 p-5 text-stage-red font-mono">
@@ -58,13 +71,21 @@ export default function ProcessingStatus({ jobId, onComplete }) {
 
   const stepLabel = STEP_LABELS[status.current_step] ?? status.progress_detail ?? status.current_step
   const detectedZones = status.detected_zones ?? []
+  const dots = '.'.repeat(dotCount)
 
   return (
     <div className="holo-card rounded-2xl p-6 animate-fade-in space-y-4">
+      <div className="h-2 overflow-hidden rounded-full bg-accent/10">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-accent to-accent-dim shimmer-bar transition-all duration-150"
+          style={{ width: `${animatedProgress}%` }}
+        />
+      </div>
+
       <div className="flex items-center gap-5">
         <div className="h-8 w-8 flex-shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" />
         <div>
-          <p className="font-display font-semibold text-text-primary text-lg tracking-wide">{stepLabel}</p>
+          <p className="font-display font-semibold text-text-primary text-lg tracking-wide">{stepLabel}{dots}</p>
           <p className="text-sm text-text-secondary mt-1 font-mono">{status.progress_detail}</p>
           {status.selected_frame_count > 0 && (
             <p className="text-sm text-accent mt-1 font-mono">{status.selected_frame_count} frames selected</p>

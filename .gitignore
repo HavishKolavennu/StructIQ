@@ -20,6 +20,8 @@ backend/.env
 
 # Test artifacts
 backend/test_frames/
+processing/
+qr_codes/
 backend/processing/
 
 # OS
@@ -28,3 +30,6 @@ Thumbs.db
 
 # Blender temp files
 *.blend1
+
+# Runtime storage artifacts
+backend/storage/

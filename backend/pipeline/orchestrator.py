@@ -1,333 +1,296 @@
-"""Background pipeline orchestrator for Chunk 6.
+"""Backend pipeline orchestrator.
 
-This module intentionally uses mocked processing outputs so frontend integration can
-proceed before the full Chunk 1 and Chunk 4 implementations are wired.
+Primary path:
+  process_video (Chunk 4) -> run_analysis per detected zone (Chunk 1) -> merge results
+
+No-fallback mode:
+  Real processing errors are returned to the UI as structured job errors.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import shutil
-import time
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 try:
-    from ..config import FRAMES_DIR, RESULTS_DIR
+    from ..config import FRAMES_DIR, PROCESSING_DIR, RESULTS_DIR
+    from ..models.work_packages import get_all_zones, get_demo_work_packages
+    from .analyzer import run_analysis
+    from .video_processor import VideoProcessingError, process_video
 except ImportError:
-    from config import FRAMES_DIR, RESULTS_DIR
+    from config import FRAMES_DIR, PROCESSING_DIR, RESULTS_DIR
+    from models.work_packages import get_all_zones, get_demo_work_packages
+    from pipeline.analyzer import run_analysis
+    from pipeline.video_processor import VideoProcessingError, process_video
 
-MOCK_ZONES = [
-    {"zone_id": "floor_3_bay_a", "zone_label": "Floor 3 - Bay A", "work_packages": ["wp_beam_layout", "wp_plumbing_roughin"]},
-    {"zone_id": "floor_3_bay_b", "zone_label": "Floor 3 - Bay B", "work_packages": ["wp_hvac_main", "wp_partition_walls"]},
-]
-
-MOCK_RESULTS_TEMPLATE = {
-    "summary": {
-        "total_work_packages": 4,
-        "total_elements": 12,
-        "stages_breakdown": {
-            "complete": 3,
-            "in_progress": 6,
-            "not_started": 1,
-            "not_captured": 2,
-            "inspected": 0,
-        },
-    },
-    "selection_metadata": {
-        "total_candidates": 248,
-        "selected_count": 26,
-        "selection_criteria": {
-            "sharpness_weight": 0.4,
-            "contrast_weight": 0.15,
-            "edge_density_weight": 0.15,
-            "diversity_threshold_ssim": 0.85,
-        },
-    },
-    "work_packages": [
-        {
-            "id": "wp_beam_layout",
-            "name": "Beam Layout",
-            "zone": "floor_3_bay_a",
-            "owner": "Joe's Structural LLC",
-            "overall_stage": "placed",
-            "elements": [
-                {
-                    "id": "beam_central_1",
-                    "name": "Central Beam",
-                    "type": "beam",
-                    "stage": "connected",
-                    "stage_label": "Connected — permanent connections made",
-                    "confidence": "high",
-                    "conflicting": False,
-                    "frame_evidence": [
-                        {
-                            "frame_id": "frame_004",
-                            "frame_path": "{frame_base}/frame_004.jpg",
-                            "vlm_observation": "Central beam seated and bolted at both supports.",
-                            "vlm_stage_assessment": "connected",
-                        }
-                    ],
-                },
-                {
-                    "id": "beam_left_1",
-                    "name": "Left Beam",
-                    "type": "beam",
-                    "stage": "placed",
-                    "stage_label": "Placed — in position, not yet connected",
-                    "confidence": "medium",
-                    "conflicting": False,
-                    "frame_evidence": [
-                        {
-                            "frame_id": "frame_006",
-                            "frame_path": "{frame_base}/frame_006.jpg",
-                            "vlm_observation": "Beam resting on support points with temporary bracing.",
-                            "vlm_stage_assessment": "placed",
-                        }
-                    ],
-                },
-                {
-                    "id": "beam_right_1",
-                    "name": "Right Beam",
-                    "type": "beam",
-                    "stage": "not_captured",
-                    "stage_label": "Not visible in uploaded footage",
-                    "confidence": "none",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-            ],
-        },
-        {
-            "id": "wp_plumbing_roughin",
-            "name": "Plumbing Rough-In",
-            "zone": "floor_3_bay_a",
-            "owner": "Allied Mechanical",
-            "overall_stage": "rough_in_started",
-            "elements": [
-                {
-                    "id": "pipe_main_supply",
-                    "name": "Main Supply Line",
-                    "type": "pipe",
-                    "stage": "complete",
-                    "stage_label": "Complete",
-                    "confidence": "high",
-                    "conflicting": False,
-                    "frame_evidence": [
-                        {
-                            "frame_id": "frame_010",
-                            "frame_path": "{frame_base}/frame_010.jpg",
-                            "vlm_observation": "Main supply line fully installed and supported.",
-                            "vlm_stage_assessment": "complete",
-                        }
-                    ],
-                },
-                {
-                    "id": "pipe_branch_1",
-                    "name": "Branch Line 1",
-                    "type": "pipe",
-                    "stage": "rough_in_started",
-                    "stage_label": "Rough-In Started",
-                    "confidence": "medium",
-                    "conflicting": False,
-                    "frame_evidence": [
-                        {
-                            "frame_id": "frame_012",
-                            "frame_path": "{frame_base}/frame_012.jpg",
-                            "vlm_observation": "Partial branch run visible with open end.",
-                            "vlm_stage_assessment": "rough_in_started",
-                        }
-                    ],
-                },
-                {
-                    "id": "pipe_branch_2",
-                    "name": "Branch Line 2",
-                    "type": "pipe",
-                    "stage": "materials_on_site",
-                    "stage_label": "Materials On Site",
-                    "confidence": "low",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-            ],
-        },
-        {
-            "id": "wp_hvac_main",
-            "name": "HVAC Ductwork",
-            "zone": "floor_3_bay_b",
-            "owner": "CoolAir Systems",
-            "overall_stage": "duct_installed",
-            "elements": [
-                {
-                    "id": "duct_hvac_main",
-                    "name": "Main Trunk Duct",
-                    "type": "duct",
-                    "stage": "duct_installed",
-                    "stage_label": "Duct Installed",
-                    "confidence": "high",
-                    "conflicting": False,
-                    "frame_evidence": [
-                        {
-                            "frame_id": "frame_018",
-                            "frame_path": "{frame_base}/frame_018.jpg",
-                            "vlm_observation": "Main duct run installed and hung at ceiling.",
-                            "vlm_stage_assessment": "duct_installed",
-                        }
-                    ],
-                },
-                {
-                    "id": "duct_branch_north",
-                    "name": "North Branch",
-                    "type": "duct",
-                    "stage": "not_started",
-                    "stage_label": "Not Started",
-                    "confidence": "none",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-                {
-                    "id": "duct_branch_south",
-                    "name": "South Branch",
-                    "type": "duct",
-                    "stage": "materials_on_site",
-                    "stage_label": "Materials On Site",
-                    "confidence": "low",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-            ],
-        },
-        {
-            "id": "wp_partition_walls",
-            "name": "Partition Walls",
-            "zone": "floor_3_bay_b",
-            "owner": "WallCraft Interiors",
-            "overall_stage": "framed",
-            "elements": [
-                {
-                    "id": "wall_partition_a",
-                    "name": "Partition Wall A",
-                    "type": "wall",
-                    "stage": "framed",
-                    "stage_label": "Framed",
-                    "confidence": "medium",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-                {
-                    "id": "wall_partition_b",
-                    "name": "Partition Wall B",
-                    "type": "wall",
-                    "stage": "not_captured",
-                    "stage_label": "Not visible in uploaded footage",
-                    "confidence": "none",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-                {
-                    "id": "wall_partition_c",
-                    "name": "Partition Wall C",
-                    "type": "wall",
-                    "stage": "complete",
-                    "stage_label": "Complete",
-                    "confidence": "high",
-                    "conflicting": False,
-                    "frame_evidence": [],
-                },
-            ],
-        },
-    ],
-}
+logger = logging.getLogger(__name__)
 
 
 def _set_status(jobs: dict[str, dict], job_id: str, **updates) -> None:
     jobs[job_id].update(updates)
 
 
+def _safe_zone_label(zone_id: str, zone_meta: Optional[dict]) -> str:
+    if zone_meta and zone_meta.get("zone_label"):
+        return str(zone_meta["zone_label"])
+    return zone_id.replace("_", " ").title()
+
+
+def _resolve_analysis_zone_id(zone_id: str, zone_meta: Optional[dict]) -> str:
+    """Map QR zone ids to known demo zone ids used by current analyzer/work package registry."""
+    candidates: list[str] = []
+
+    if zone_meta and zone_meta.get("zone_id"):
+        candidates.append(str(zone_meta["zone_id"]))
+    candidates.append(zone_id)
+
+    # Heuristic: floor_3_bay_a -> floor_3
+    for candidate in list(candidates):
+        parts = candidate.split("_")
+        if len(parts) >= 2 and parts[0] == "floor" and parts[1].isdigit():
+            candidates.append(f"floor_{parts[1]}")
+
+    valid_zones = set(get_all_zones())
+    for candidate in candidates:
+        if candidate in valid_zones:
+            return candidate
+
+    # Last-resort fallback for current demo data
+    return "floor_3" if "floor_3" in valid_zones else (next(iter(valid_zones)) if valid_zones else zone_id)
+
+
+def _copy_selected_frames_for_serving(zone_frames: dict[str, list[Path]], job_id: str) -> int:
+    """Copy selected frames into /api/frames serving directory."""
+    job_frame_dir = FRAMES_DIR / job_id
+    job_frame_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for frames in zone_frames.values():
+        for src in frames:
+            if not src.exists():
+                continue
+            dst = job_frame_dir / src.name
+            if not dst.exists():
+                shutil.copy2(src, dst)
+                copied += 1
+    return copied
+
+
+def _merge_zone_results(
+    *,
+    job_id: str,
+    zone_results: list[dict],
+    detected_zones: list[str],
+    selection_metadata_by_zone: dict[str, dict],
+) -> dict:
+    breakdown_keys = {"complete", "in_progress", "not_started", "not_captured", "inspected"}
+    merged_breakdown = {key: 0 for key in breakdown_keys}
+
+    merged_work_packages: list[dict] = []
+    failed_frames: list[str] = []
+
+    total_work_packages = 0
+    total_elements = 0
+
+    for zone_result in zone_results:
+        summary = zone_result.get("summary", {})
+        total_work_packages += int(summary.get("total_work_packages", 0) or 0)
+        total_elements += int(summary.get("total_elements", 0) or 0)
+
+        for key, value in (summary.get("stages_breakdown") or {}).items():
+            merged_breakdown[key] = merged_breakdown.get(key, 0) + int(value or 0)
+
+        failed_frames.extend(summary.get("failed_frames") or [])
+        merged_work_packages.extend(zone_result.get("work_packages") or [])
+
+    selected_count = sum(
+        int((zone_meta or {}).get("selected_count", 0) or 0)
+        for zone_meta in selection_metadata_by_zone.values()
+    )
+    total_candidates = sum(
+        int((zone_meta or {}).get("total_candidates", 0) or 0)
+        for zone_meta in selection_metadata_by_zone.values()
+    )
+
+    return {
+        "job_id": job_id,
+        "zone_id": "multi_zone",
+        "zone_label": "Multi-Zone Walkthrough",
+        "detected_zones": detected_zones,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "total_work_packages": total_work_packages,
+            "total_elements": total_elements,
+            "stages_breakdown": merged_breakdown,
+            "failed_frames": failed_frames,
+        },
+        "work_packages": merged_work_packages,
+        "selection_metadata": {
+            "total_candidates": total_candidates,
+            "selected_count": selected_count,
+            "zones": selection_metadata_by_zone,
+        },
+    }
+
+
 def _write_placeholder_frames(job_id: str) -> None:
-    """Create deterministic frame files for /api/frames endpoint in mock mode."""
-    from PIL import Image, ImageDraw  # imported lazily to keep module lightweight
+    """Legacy fallback helper (currently not used in no-fallback mode)."""
+    from PIL import Image, ImageDraw
 
     job_frame_dir = FRAMES_DIR / job_id
     job_frame_dir.mkdir(parents=True, exist_ok=True)
 
-    frame_names = [
-        "frame_004.jpg",
-        "frame_006.jpg",
-        "frame_010.jpg",
-        "frame_012.jpg",
-        "frame_018.jpg",
-    ]
-
-    for idx, name in enumerate(frame_names, start=1):
-        image = Image.new("RGB", (1280, 720), color=(240 - idx * 10, 235 - idx * 8, 220 - idx * 6))
+    for idx in range(1, 6):
+        frame_name = f"frame_demo_{idx:03d}.jpg"
+        image = Image.new("RGB", (1280, 720), color=(236 - idx * 8, 230 - idx * 7, 215 - idx * 6))
         draw = ImageDraw.Draw(image)
-        draw.rectangle((50, 50, 1230, 670), outline=(80, 80, 80), width=3)
-        draw.text((80, 90), f"StructIQ Mock Frame {idx}", fill=(20, 20, 20))
-        draw.text((80, 130), f"Job: {job_id}", fill=(30, 30, 30))
-        draw.text((80, 170), name, fill=(30, 30, 30))
-        image.save(job_frame_dir / name, format="JPEG", quality=90)
+        draw.rectangle((60, 60, 1220, 660), outline=(80, 80, 80), width=3)
+        draw.text((90, 90), f"StructIQ Fallback Frame {idx}", fill=(20, 20, 20))
+        draw.text((90, 130), f"Job: {job_id}", fill=(30, 30, 30))
+        image.save(job_frame_dir / frame_name, format="JPEG", quality=90)
 
 
-def _build_results(job_id: str, detected_zones: list[str]) -> dict:
-    frame_base = f"/api/frames/{job_id}"
-    results = deepcopy(MOCK_RESULTS_TEMPLATE)
+def _build_fallback_results(job_id: str, reason: str, detected_zones: Optional[list[str]] = None) -> dict:
+    """Legacy fallback helper (currently not used in no-fallback mode)."""
+    template_path = Path(__file__).resolve().parents[1] / "results.json"
 
-    for wp in results["work_packages"]:
+    if template_path.exists():
+        results = json.loads(template_path.read_text(encoding="utf-8"))
+    else:
+        results = {
+            "summary": {
+                "total_work_packages": 0,
+                "total_elements": 0,
+                "stages_breakdown": {
+                    "complete": 0,
+                    "in_progress": 0,
+                    "not_started": 0,
+                    "not_captured": 0,
+                    "inspected": 0,
+                },
+                "failed_frames": [],
+            },
+            "work_packages": [],
+            "selection_metadata": {"selected_count": 0},
+        }
+
+    # Repoint frame evidence to API-serving path for this job
+    for wp in results.get("work_packages", []):
         for element in wp.get("elements", []):
             for evidence in element.get("frame_evidence", []):
-                evidence["frame_path"] = evidence["frame_path"].format(frame_base=frame_base)
+                frame_name = Path(str(evidence.get("frame_path", ""))).name or f"{evidence.get('frame_id', 'frame')}.jpg"
+                evidence["frame_path"] = f"/api/frames/{job_id}/{frame_name}"
 
     results.update(
         {
             "job_id": job_id,
             "zone_id": "multi_zone",
-            "zone_label": "Multi-Zone Walkthrough",
-            "detected_zones": detected_zones,
+            "zone_label": "Fallback Demo",
+            "detected_zones": detected_zones or ["Demo Zone"],
             "processed_at": datetime.now(timezone.utc).isoformat(),
         }
     )
+
+    summary = results.setdefault("summary", {})
+    summary["pipeline_note"] = f"Fallback results used: {reason}"
     return results
 
 
 def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
-    """Run mocked pipeline stages and persist mock results to disk."""
+    """Run real Chunk 4 + Chunk 1 pipeline."""
+    result_path: Optional[Path] = None
+
     try:
         _set_status(jobs, job_id, current_step="frame_extraction", progress_detail="Extracting frames from uploaded video...")
-        time.sleep(0.6)
 
-        _set_status(jobs, job_id, current_step="qr_detection", progress_detail="Detecting zones from QR codes...")
-        time.sleep(0.6)
+        # 1) Chunk 4: video -> selected frames grouped by zone
+        def on_video_progress(step: str, detail: str) -> None:
+            _set_status(jobs, job_id, current_step=step, progress_detail=detail)
 
-        detected_zones = [z["zone_label"] for z in MOCK_ZONES]
+        try:
+            video_result = process_video(
+                video_path=video_path,
+                job_id=job_id,
+                processing_root=PROCESSING_DIR,
+                progress_callback=on_video_progress,
+            )
+        except VideoProcessingError as exc:
+            message = str(exc)
+            if "No QR codes detected" in message:
+                message = (
+                    "No QR zone markers were detected in this video. "
+                    "StructIQ requires at least one visible zone QR code to segment and analyze the walkthrough."
+                )
+            logger.warning("Video processing failed for job %s: %s", job_id, message)
+            _set_status(
+                jobs,
+                job_id,
+                status="error",
+                current_step="error",
+                progress_detail="Video processing failed.",
+                error_message=message,
+            )
+            return
+
+        detected_zones = [
+            _safe_zone_label(zone_id, video_result.zone_metadata.get(zone_id))
+            for zone_id in video_result.zone_frames.keys()
+        ]
+
+        copied_frames = _copy_selected_frames_for_serving(video_result.zone_frames, job_id)
+
         _set_status(
             jobs,
             job_id,
-            current_step="zone_segmentation",
+            current_step="frame_selection",
+            progress_detail=f"Frame selection complete. {copied_frames} frame(s) prepared for evidence serving.",
             detected_zones=detected_zones,
-            progress_detail=f"Found {len(detected_zones)} zones from QR scan.",
+            selected_frame_count=copied_frames,
         )
-        time.sleep(0.6)
 
-        _set_status(jobs, job_id, current_step="frame_selection", progress_detail="Selecting best frames per detected zone...")
-        time.sleep(0.6)
+        # 2) Chunk 1: analyze each detected zone
+        zone_results: list[dict] = []
+        for index, (zone_id, selected_frames) in enumerate(video_result.zone_frames.items(), start=1):
+            zone_meta = video_result.zone_metadata.get(zone_id, {})
+            zone_label = _safe_zone_label(zone_id, zone_meta)
 
-        for zone in detected_zones:
             _set_status(
                 jobs,
                 job_id,
                 current_step="vlm_analysis",
-                progress_detail=f"Analyzing {zone}...",
                 detected_zones=detected_zones,
+                progress_detail=(
+                    f"Analyzing {zone_label} ({index}/{len(video_result.zone_frames)})..."
+                ),
             )
-            time.sleep(0.6)
 
+            analysis_zone_id = _resolve_analysis_zone_id(zone_id, zone_meta)
+            work_packages = get_demo_work_packages(analysis_zone_id)
+
+            zone_result = run_analysis(
+                selected_frames=selected_frames,
+                zone_id=analysis_zone_id,
+                work_packages=work_packages if work_packages else None,
+                job_id=job_id,
+            )
+            zone_results.append(zone_result)
+
+        # 3) Merge + persist final results
         _set_status(jobs, job_id, current_step="assembling_results", progress_detail="Assembling final results...")
-        time.sleep(0.4)
 
-        _write_placeholder_frames(job_id)
-        results = _build_results(job_id=job_id, detected_zones=detected_zones)
+        if not zone_results:
+            raise RuntimeError("No zone analysis results were produced.")
+
+        results = _merge_zone_results(
+            job_id=job_id,
+            zone_results=zone_results,
+            detected_zones=detected_zones,
+            selection_metadata_by_zone=video_result.selection_metadata,
+        )
 
         result_dir = RESULTS_DIR / job_id
         result_dir.mkdir(parents=True, exist_ok=True)
@@ -341,10 +304,12 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
             current_step="complete",
             progress_detail="Analysis complete.",
             results_path=str(result_path),
-            detected_zones=detected_zones,
-            selected_frame_count=results.get("selection_metadata", {}).get("selected_count", 0),
+            detected_zones=results.get("detected_zones", detected_zones),
+            selected_frame_count=int(results.get("selection_metadata", {}).get("selected_count", copied_frames) or copied_frames),
         )
+
     except Exception as exc:
+        logger.exception("Pipeline failure for job %s", job_id)
         _set_status(
             jobs,
             job_id,
@@ -353,10 +318,6 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
             progress_detail="Pipeline failed.",
             error_message=str(exc),
         )
-    finally:
-        # Keep uploaded video by default for debugging; clean-up can be added later.
-        if not video_path.exists():
-            return
 
 
 def cleanup_job_artifacts(job_id: str) -> None:

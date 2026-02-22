@@ -24,10 +24,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..models.work_packages import WorkPackage, get_demo_work_packages
-from .prompts import build_system_prompt, build_frame_prompt
-from .vlm_client import analyze_frame, AnalysisError
-from .aggregator import aggregate_observations, compute_work_package_stage, ElementResults
+try:
+    from ..models.work_packages import WorkPackage, get_demo_work_packages
+    from .prompts import build_system_prompt, build_frame_prompt
+    from .vlm_client import analyze_frame, AnalysisError
+    from .aggregator import aggregate_observations, compute_work_package_stage, ElementResults
+except ImportError:
+    from models.work_packages import WorkPackage, get_demo_work_packages
+    from pipeline.prompts import build_system_prompt, build_frame_prompt
+    from pipeline.vlm_client import analyze_frame, AnalysisError
+    from pipeline.aggregator import aggregate_observations, compute_work_package_stage, ElementResults
 
 logger = logging.getLogger(__name__)
 

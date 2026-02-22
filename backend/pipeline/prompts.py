@@ -8,7 +8,10 @@ once per frame.
 
 from __future__ import annotations
 
-from ..models.work_packages import WorkPackage
+try:
+    from ..models.work_packages import WorkPackage
+except ImportError:
+    from models.work_packages import WorkPackage
 
 
 def build_system_prompt(zone_label: str, work_packages: list[WorkPackage]) -> str:
