@@ -3,8 +3,9 @@
 Primary path:
   process_video (Chunk 4) -> run_analysis per detected zone (Chunk 1) -> merge results
 
-No-fallback mode:
-  Real processing errors are returned to the UI as structured job errors.
+Demo fallback mode:
+  If QR detection fails and demo_mode is enabled, continue with a single synthetic
+  zone so hackathon demos can still run end-to-end.
 """
 
 from __future__ import annotations
@@ -20,11 +21,15 @@ try:
     from ..config import FRAMES_DIR, PROCESSING_DIR, RESULTS_DIR
     from ..models.work_packages import get_all_zones, get_demo_work_packages
     from .analyzer import run_analysis
+    from .frame_extractor import FrameExtractionError, extract_frames
+    from .frame_selector import select_frames
     from .video_processor import VideoProcessingError, process_video
 except ImportError:
     from config import FRAMES_DIR, PROCESSING_DIR, RESULTS_DIR
     from models.work_packages import get_all_zones, get_demo_work_packages
     from pipeline.analyzer import run_analysis
+    from pipeline.frame_extractor import FrameExtractionError, extract_frames
+    from pipeline.frame_selector import select_frames
     from pipeline.video_processor import VideoProcessingError, process_video
 
 logger = logging.getLogger(__name__)
@@ -41,7 +46,7 @@ def _safe_zone_label(zone_id: str, zone_meta: Optional[dict]) -> str:
 
 
 def _resolve_analysis_zone_id(zone_id: str, zone_meta: Optional[dict]) -> str:
-    """Map QR zone ids to known demo zone ids used by current analyzer/work package registry."""
+    """Map QR/demo zone IDs to known demo zone IDs used by current registry."""
     candidates: list[str] = []
 
     if zone_meta and zone_meta.get("zone_id"):
@@ -59,7 +64,6 @@ def _resolve_analysis_zone_id(zone_id: str, zone_meta: Optional[dict]) -> str:
         if candidate in valid_zones:
             return candidate
 
-    # Last-resort fallback for current demo data
     return "floor_3" if "floor_3" in valid_zones else (next(iter(valid_zones)) if valid_zones else zone_id)
 
 
@@ -80,12 +84,65 @@ def _copy_selected_frames_for_serving(zone_frames: dict[str, list[Path]], job_id
     return copied
 
 
+def _process_video_demo_zone(video_path: Path, job_id: str) -> tuple[dict[str, list[Path]], dict[str, dict], dict[str, dict]]:
+    """Fallback segmentation path used only when demo_mode=True and no QR is detected.
+
+    Process:
+      extract frames -> run global smart selection -> map selected frames to one zone.
+    """
+    job_dir = PROCESSING_DIR / job_id
+    candidates_dir = job_dir / "candidates"
+    selected_dir = job_dir / "selected" / "demo_zone"
+
+    candidates_dir.mkdir(parents=True, exist_ok=True)
+    selected_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        candidate_frames = extract_frames(video_path=video_path, fps=2, output_dir=candidates_dir)
+    except FrameExtractionError as exc:
+        raise RuntimeError(f"Demo fallback frame extraction failed: {exc}") from exc
+
+    selected_candidates, selection_metadata = select_frames(
+        candidates=candidate_frames,
+        max_frames=25,
+        ssim_threshold=0.85,
+    )
+
+    copied_selected: list[Path] = []
+    for src in selected_candidates:
+        dst = selected_dir / src.name
+        shutil.copy2(src, dst)
+        copied_selected.append(dst)
+
+    all_wp_ids = [wp.id for wp in get_demo_work_packages("floor_3")]
+
+    zone_frames = {"demo_zone": copied_selected}
+    zone_metadata = {
+        "demo_zone": {
+            "zone_id": "demo_zone",
+            "zone_label": "Demo Zone",
+            "work_packages": all_wp_ids,
+            "mode": "demo_fallback",
+        }
+    }
+    selection_metadata_by_zone = {
+        "demo_zone": {
+            **selection_metadata.to_dict(),
+            "zone_label": "Demo Zone",
+            "selected_frames": [path.name for path in copied_selected],
+        }
+    }
+
+    return zone_frames, zone_metadata, selection_metadata_by_zone
+
+
 def _merge_zone_results(
     *,
     job_id: str,
     zone_results: list[dict],
     detected_zones: list[str],
     selection_metadata_by_zone: dict[str, dict],
+    demo_fallback_used: bool,
 ) -> dict:
     breakdown_keys = {"complete", "in_progress", "not_started", "not_captured", "inspected"}
     merged_breakdown = {key: 0 for key in breakdown_keys}
@@ -116,100 +173,50 @@ def _merge_zone_results(
         for zone_meta in selection_metadata_by_zone.values()
     )
 
+    summary = {
+        "total_work_packages": total_work_packages,
+        "total_elements": total_elements,
+        "stages_breakdown": merged_breakdown,
+        "failed_frames": failed_frames,
+    }
+
+    if demo_fallback_used:
+        summary["pipeline_note"] = (
+            "Demo mode enabled: QR markers not detected. "
+            "Used single-zone fallback segmentation for demo continuity."
+        )
+
     return {
         "job_id": job_id,
         "zone_id": "multi_zone",
-        "zone_label": "Multi-Zone Walkthrough",
+        "zone_label": "Multi-Zone Walkthrough" if not demo_fallback_used else "Demo Zone Walkthrough",
         "detected_zones": detected_zones,
         "processed_at": datetime.now(timezone.utc).isoformat(),
-        "summary": {
-            "total_work_packages": total_work_packages,
-            "total_elements": total_elements,
-            "stages_breakdown": merged_breakdown,
-            "failed_frames": failed_frames,
-        },
+        "summary": summary,
         "work_packages": merged_work_packages,
         "selection_metadata": {
             "total_candidates": total_candidates,
             "selected_count": selected_count,
             "zones": selection_metadata_by_zone,
         },
+        "mode": "demo_fallback" if demo_fallback_used else "qr_segmented",
     }
 
 
-def _write_placeholder_frames(job_id: str) -> None:
-    """Legacy fallback helper (currently not used in no-fallback mode)."""
-    from PIL import Image, ImageDraw
-
-    job_frame_dir = FRAMES_DIR / job_id
-    job_frame_dir.mkdir(parents=True, exist_ok=True)
-
-    for idx in range(1, 6):
-        frame_name = f"frame_demo_{idx:03d}.jpg"
-        image = Image.new("RGB", (1280, 720), color=(236 - idx * 8, 230 - idx * 7, 215 - idx * 6))
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((60, 60, 1220, 660), outline=(80, 80, 80), width=3)
-        draw.text((90, 90), f"StructIQ Fallback Frame {idx}", fill=(20, 20, 20))
-        draw.text((90, 130), f"Job: {job_id}", fill=(30, 30, 30))
-        image.save(job_frame_dir / frame_name, format="JPEG", quality=90)
-
-
-def _build_fallback_results(job_id: str, reason: str, detected_zones: Optional[list[str]] = None) -> dict:
-    """Legacy fallback helper (currently not used in no-fallback mode)."""
-    template_path = Path(__file__).resolve().parents[1] / "results.json"
-
-    if template_path.exists():
-        results = json.loads(template_path.read_text(encoding="utf-8"))
-    else:
-        results = {
-            "summary": {
-                "total_work_packages": 0,
-                "total_elements": 0,
-                "stages_breakdown": {
-                    "complete": 0,
-                    "in_progress": 0,
-                    "not_started": 0,
-                    "not_captured": 0,
-                    "inspected": 0,
-                },
-                "failed_frames": [],
-            },
-            "work_packages": [],
-            "selection_metadata": {"selected_count": 0},
-        }
-
-    # Repoint frame evidence to API-serving path for this job
-    for wp in results.get("work_packages", []):
-        for element in wp.get("elements", []):
-            for evidence in element.get("frame_evidence", []):
-                frame_name = Path(str(evidence.get("frame_path", ""))).name or f"{evidence.get('frame_id', 'frame')}.jpg"
-                evidence["frame_path"] = f"/api/frames/{job_id}/{frame_name}"
-
-    results.update(
-        {
-            "job_id": job_id,
-            "zone_id": "multi_zone",
-            "zone_label": "Fallback Demo",
-            "detected_zones": detected_zones or ["Demo Zone"],
-            "processed_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-
-    summary = results.setdefault("summary", {})
-    summary["pipeline_note"] = f"Fallback results used: {reason}"
-    return results
-
-
-def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
-    """Run real Chunk 4 + Chunk 1 pipeline."""
-    result_path: Optional[Path] = None
-
+def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict], demo_mode: bool = False) -> None:
+    """Run real Chunk 4 + Chunk 1 pipeline, with optional no-QR demo fallback mode."""
     try:
-        _set_status(jobs, job_id, current_step="frame_extraction", progress_detail="Extracting frames from uploaded video...")
+        _set_status(
+            jobs,
+            job_id,
+            current_step="frame_extraction",
+            progress_detail="Extracting frames from uploaded video...",
+        )
 
-        # 1) Chunk 4: video -> selected frames grouped by zone
         def on_video_progress(step: str, detail: str) -> None:
             _set_status(jobs, job_id, current_step=step, progress_detail=detail)
+
+        demo_fallback_used = False
 
         try:
             video_result = process_video(
@@ -218,30 +225,45 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
                 processing_root=PROCESSING_DIR,
                 progress_callback=on_video_progress,
             )
+            zone_frames = video_result.zone_frames
+            zone_metadata = video_result.zone_metadata
+            selection_metadata_by_zone = video_result.selection_metadata
         except VideoProcessingError as exc:
             message = str(exc)
-            if "No QR codes detected" in message:
-                message = (
-                    "No QR zone markers were detected in this video. "
-                    "StructIQ requires at least one visible zone QR code to segment and analyze the walkthrough."
+            no_qr = "No QR codes detected" in message
+
+            if no_qr and demo_mode:
+                demo_fallback_used = True
+                _set_status(
+                    jobs,
+                    job_id,
+                    current_step="zone_segmentation",
+                    progress_detail="No QR detected. Demo mode enabled -> using single Demo Zone fallback...",
                 )
-            logger.warning("Video processing failed for job %s: %s", job_id, message)
-            _set_status(
-                jobs,
-                job_id,
-                status="error",
-                current_step="error",
-                progress_detail="Video processing failed.",
-                error_message=message,
-            )
-            return
+                zone_frames, zone_metadata, selection_metadata_by_zone = _process_video_demo_zone(video_path, job_id)
+            else:
+                if no_qr:
+                    message = (
+                        "No QR zone markers were detected in this video. "
+                        "StructIQ requires at least one visible zone QR code to segment and analyze the walkthrough."
+                    )
+                logger.warning("Video processing failed for job %s: %s", job_id, message)
+                _set_status(
+                    jobs,
+                    job_id,
+                    status="error",
+                    current_step="error",
+                    progress_detail="Video processing failed.",
+                    error_message=message,
+                )
+                return
 
         detected_zones = [
-            _safe_zone_label(zone_id, video_result.zone_metadata.get(zone_id))
-            for zone_id in video_result.zone_frames.keys()
+            _safe_zone_label(zone_id, zone_metadata.get(zone_id))
+            for zone_id in zone_frames.keys()
         ]
 
-        copied_frames = _copy_selected_frames_for_serving(video_result.zone_frames, job_id)
+        copied_frames = _copy_selected_frames_for_serving(zone_frames, job_id)
 
         _set_status(
             jobs,
@@ -252,10 +274,9 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
             selected_frame_count=copied_frames,
         )
 
-        # 2) Chunk 1: analyze each detected zone
         zone_results: list[dict] = []
-        for index, (zone_id, selected_frames) in enumerate(video_result.zone_frames.items(), start=1):
-            zone_meta = video_result.zone_metadata.get(zone_id, {})
+        for index, (zone_id, selected_frames) in enumerate(zone_frames.items(), start=1):
+            zone_meta = zone_metadata.get(zone_id, {})
             zone_label = _safe_zone_label(zone_id, zone_meta)
 
             _set_status(
@@ -263,9 +284,7 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
                 job_id,
                 current_step="vlm_analysis",
                 detected_zones=detected_zones,
-                progress_detail=(
-                    f"Analyzing {zone_label} ({index}/{len(video_result.zone_frames)})..."
-                ),
+                progress_detail=f"Analyzing {zone_label} ({index}/{len(zone_frames)})...",
             )
 
             analysis_zone_id = _resolve_analysis_zone_id(zone_id, zone_meta)
@@ -279,7 +298,6 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
             )
             zone_results.append(zone_result)
 
-        # 3) Merge + persist final results
         _set_status(jobs, job_id, current_step="assembling_results", progress_detail="Assembling final results...")
 
         if not zone_results:
@@ -289,7 +307,8 @@ def run_pipeline(job_id: str, video_path: Path, jobs: dict[str, dict]) -> None:
             job_id=job_id,
             zone_results=zone_results,
             detected_zones=detected_zones,
-            selection_metadata_by_zone=video_result.selection_metadata,
+            selection_metadata_by_zone=selection_metadata_by_zone,
+            demo_fallback_used=demo_fallback_used,
         )
 
         result_dir = RESULTS_DIR / job_id

@@ -57,7 +57,7 @@ class StructIQApiTests(unittest.TestCase):
             task.func(*task.args, **task.kwargs)
 
     def test_upload_accepts_video_and_returns_job(self):
-        def noop_pipeline(job_id, video_path, jobs):
+        def noop_pipeline(job_id, video_path, jobs, demo_mode=False):
             return None
 
         bg = BackgroundTasks()
@@ -104,7 +104,7 @@ class StructIQApiTests(unittest.TestCase):
         self.assertEqual(err.exception.status_code, 404)
 
     def test_full_upload_status_results_flow(self):
-        def complete_pipeline(job_id, video_path, jobs):
+        def complete_pipeline(job_id, video_path, jobs, demo_mode=False):
             frame_dir = self.frames / job_id
             frame_dir.mkdir(parents=True, exist_ok=True)
             frame_file = frame_dir / "frame_001.jpg"

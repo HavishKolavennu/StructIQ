@@ -5,6 +5,7 @@ import ProcessingStatus from './ProcessingStatus'
 
 export default function UploadView({ onComplete }) {
   const [file, setFile] = useState(null)
+  const [demoMode, setDemoMode] = useState(true)
   const [jobId, setJobId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
@@ -15,7 +16,7 @@ export default function UploadView({ onComplete }) {
     setUploading(true)
 
     try {
-      const data = await uploadVideo(file)
+      const data = await uploadVideo(file, { demoMode })
       setJobId(data.job_id)
     } catch (err) {
       setUploadError(err.message ?? 'Upload failed')
@@ -59,6 +60,22 @@ export default function UploadView({ onComplete }) {
 
       <div className="space-y-6">
         <VideoUploader onFileSelect={setFile} selectedFile={file} disabled={uploading} />
+
+        <label className="flex items-start gap-3 rounded-xl border border-accent/20 bg-accent/5 p-4 text-sm text-text-secondary">
+          <input
+            type="checkbox"
+            checked={demoMode}
+            onChange={(e) => setDemoMode(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[var(--accent)]"
+            disabled={uploading}
+          />
+          <span>
+            <span className="font-semibold text-text-primary">Demo mode fallback</span>
+            <span className="block mt-1 font-mono text-xs">
+              If no QR codes are detected, continue with a single Demo Zone instead of failing.
+            </span>
+          </span>
+        </label>
 
         {uploadError && (
           <div className="rounded-xl border border-stage-red/40 bg-stage-red/10 p-4 text-stage-red text-sm font-mono">
